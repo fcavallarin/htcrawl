@@ -6,7 +6,9 @@
   "dependencies": {
     "puppeteer": "^1.10.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+	"puppeteer": "^1.10.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
