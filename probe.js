@@ -44,6 +44,7 @@ function initProbe(options, inputValues){
 		this._pendingAjax = [];
 		this._pendingJsonp = [];
 		this._pendingFetch = [];
+		this._pendingWebsocket = [];
 		this.inputValues = inputValues;
 		this.currentUserScriptParameters = [];
 		this.domModifications = [];
@@ -793,9 +794,9 @@ function initProbe(options, inputValues){
 
 	}
 
-	Probe.prototype.triggerWebsocketSendEvent = function(url, message){
+	Probe.prototype.triggerWebsocketSendEvent = async function(url, message){
 		var req  = new this.Request("websocket", "GET", url, null, null);
-		this.dispatchProbeEvent("websocketSend", { request: req, message: message});
+		return await this.dispatchProbeEvent("websocketSend", { request: req, message: message});
 
 	}
 
@@ -841,7 +842,7 @@ function initProbe(options, inputValues){
 					resolve(reqPerformed);
 					return;
 				}
-				timeout -= 10;
+				timeout -= 1;
 				reqPerformed = true;
 			}, 0);
 		});
@@ -850,14 +851,34 @@ function initProbe(options, inputValues){
 
 	Probe.prototype.waitAjax = async function(){
 		await this.waitRequests(this._pendingAjax);
+		if(this._pendingAjax.length > 0) {
+			// @TODO handle request timeout
+		}
+		this._pendingAjax = [];
 	}
 
 	Probe.prototype.waitJsonp = async function(){
 		await this.waitRequests(this._pendingJsonp);
+		if(this._pendingJsonp.length > 0) {
+			// @TODO handle request timeout
+		}
+		this._pendingJsonp = [];
 	}
 
 	Probe.prototype.waitFetch = async function(){
 		await this.waitRequests(this._pendingFetch);
+		if(this._pendingFetch.length > 0) {
+			// @TODO handle request timeout
+		}
+		this._pendingFetch = [];
+	}
+
+	Probe.prototype.waitWebsocket = async function(){
+		await this.waitRequests(this._pendingWebsocket);
+		if(this._pendingWebsocket.length > 0) {
+			// @TODO handle request timeout
+		}
+		this._pendingWebsocket = [];
 	}
 
 	Probe.prototype.fetchHook = async function(originalFetch, url, options){
@@ -1024,18 +1045,23 @@ function initProbe(options, inputValues){
 					await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
 				}
 
+				if(this._pendingAjax.length > 0) {
+					let chainLimit = this.options.maximumAjaxChain;
+					do {
+						chainLimit--;
+						if(chainLimit == 0){
+							break;
+						}
+						await this.sleep(0);
+					} while(await this.waitAjax());
+				}
 
-				let chainLimit = this.options.maximumAjaxChain;
-				do {
-					chainLimit--;
-					if(chainLimit == 0){
-						break;
-					}
-					await this.sleep(0);
-				} while(await this.waitAjax());
-
-				await this.waitFetch();
-				await this.waitJsonp();
+				if(this._pendingFetch.length > 0)
+					await this.waitFetch();
+				if(this._pendingJsonp.length > 0)
+					await this.waitJsonp();
+				if(this._pendingWebsocket.length > 0)
+					await this.waitWebsocket();
 
 				newEls = this.getAddedElements();
 				for(var a = newEls.length - 1; a >= 0; a--){

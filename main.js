@@ -314,7 +314,7 @@ Crawler.prototype.loadPage = async function(browser){
 	});
 
 
-	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  this.dispatchProbeEvent(name, params)); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
+	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
 
 	 await page.setViewport({
 		width: 1366,

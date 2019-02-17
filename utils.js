@@ -109,8 +109,13 @@ exports.generateRandomValues = generateRandomValues;
 				//return WebSocket.prototype;
 				var ws = new WebSocket(url);
 				ws.__originalSend = ws.send;
+				window.__PROBE__._pendingWebsocket.push(ws);
 				ws.send = function(message){
-					window.__PROBE__.triggerWebsocketSendEvent(url, message);
+					var uRet =  window.__PROBE__.triggerWebsocketSendEvent(url, message);
+					if(!uRet){
+						window.__PROBE__._pendingWebsocket.splice(window.__PROBE__._pendingWebsocket.indexOf(ws), 1);
+						return false;
+					}
 					return ws.__originalSend(message);
 				}
 				ws.addEventListener("message", function(message){
