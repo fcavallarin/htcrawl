@@ -19,7 +19,7 @@ exports.options = {
 	searchUrls: true,
 	jsonOutput:true,
 	maxExecTime: 300000, // 300 seconds
-	ajaxTimeout:5000,
+	ajaxTimeout:3000,
 	printAjaxPostData: true,
 	loadImages: false,
 	getCookies:true,

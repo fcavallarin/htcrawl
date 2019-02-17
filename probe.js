@@ -852,7 +852,13 @@ function initProbe(options, inputValues){
 	Probe.prototype.waitAjax = async function(){
 		await this.waitRequests(this._pendingAjax);
 		if(this._pendingAjax.length > 0) {
-			// @TODO handle request timeout
+			for(let req of this._pendingAjax){
+				await this.dispatchProbeEvent("xhrCompleted", {
+					request: req.__request,
+					response: null,
+					timedout: true
+				});
+			}
 		}
 		this._pendingAjax = [];
 	}
@@ -860,7 +866,13 @@ function initProbe(options, inputValues){
 	Probe.prototype.waitJsonp = async function(){
 		await this.waitRequests(this._pendingJsonp);
 		if(this._pendingJsonp.length > 0) {
-			// @TODO handle request timeout
+			for(let req of this._pendingJsonp){
+				await this.dispatchProbeEvent("jsonpCompleted", {
+					request: req.__request,
+					response: null,
+					timedout: true
+				});
+			}
 		}
 		this._pendingJsonp = [];
 	}
@@ -868,7 +880,13 @@ function initProbe(options, inputValues){
 	Probe.prototype.waitFetch = async function(){
 		await this.waitRequests(this._pendingFetch);
 		if(this._pendingFetch.length > 0) {
-			// @TODO handle request timeout
+			for(let req of this._pendingFetch){
+				await this.dispatchProbeEvent("fetchCompleted", {
+					request: req,
+					response: null,
+					timedout: true
+				});
+			}
 		}
 		this._pendingFetch = [];
 	}
