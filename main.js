@@ -286,11 +286,10 @@ Crawler.prototype.loadPage = async function(browser){
 				return;
 			}
 
-			if(!firstRun){
+			if(!firstRun && req.frame() == page.mainFrame()){
 				page.evaluate(function(r){
 					window.__PROBE__.triggerNavigationEvent(r.url, r.method, r.data);
 				}, {method:req.method(), url:req.url(), data:req.postData()});
-
 				req.abort('aborted');
 				return;
 			} else {

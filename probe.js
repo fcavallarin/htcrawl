@@ -905,8 +905,8 @@ function initProbe(options, inputValues){
 		var data = options && 'body' in options ? options.body : null;
 		var trigger = this.getTrigger();
 		var extra_headers = {};
-		if(options && 'headers' in options){
-			for(let h of options.headers){
+		if(options  &&  options.headers && 'entries' in options.headers){
+			for(let h of options.headers.entries()){
 				extra_headers[h[0]] = h[1];
 			}
 		}
@@ -1003,6 +1003,32 @@ function initProbe(options, inputValues){
 
 	}
 
+
+	Probe.prototype.websocketHook =  function(ws, url){
+		var _this = this;
+		this.triggerWebsocketEvent(url);
+
+		var delFromPendings = function(){
+			const i = _this._pendingWebsocket.indexOf(ws);
+			if(i > -1){
+				_this._pendingWebsocket.splice(i, 1);
+			}
+		}
+		ws.__originalSend = ws.send;
+		this._pendingWebsocket.push(ws);
+		ws.send = async function(message){
+			var uRet =  await _this.triggerWebsocketSendEvent(url, message);
+			if(!uRet){
+				delFromPendings();
+				return false;
+			}
+			return ws.__originalSend(message);
+		}
+		ws.addEventListener("message", function(message){
+			_this.triggerWebsocketMessageEvent(url, message.data);
+			delFromPendings();
+		});
+	}
 
 
 	Probe.prototype.isAttachedToDOM = function(node){
