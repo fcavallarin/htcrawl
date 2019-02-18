@@ -70,5 +70,6 @@ exports.options = {
 	postData: null,
 	headlessChrome: true,
 	extraHeaders: false,
-	openChromeDevtoos: false
+	openChromeDevtoos: false,
+	exceptionOnRedirect: false
 };
