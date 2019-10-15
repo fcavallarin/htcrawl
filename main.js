@@ -218,6 +218,16 @@ Crawler.prototype.start = async function(){
 
 }
 
+
+
+Crawler.prototype.stop = function(){
+	var _this = this;
+	this._page.evaluate( () => {
+		window.__PROBE__._stop = true;
+	})
+}
+
+
 Crawler.prototype.on = function(eventName, handler){
 	eventName = eventName.toLowerCase();
 	if(!(eventName in this.probeEvents)){
@@ -249,6 +259,10 @@ Crawler.prototype.dispatchProbeEvent = async function(name, params) {
 	ret = await this.probeEvents[name](evt, this);
 	if(ret === false){
 		return false;
+	}
+
+	if(typeof ret == "object"){
+		return ret;
 	}
 
 	return true;
