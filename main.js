@@ -229,6 +229,10 @@ Crawler.prototype.start = async function(){
 		await this.load();
 	}
 
+	setTimeout(function(){
+		_this.stop();
+	}, this.options.maxExecTime);
+
 	try {
 		await _this._page.evaluate(async function(){
 			//await window.__PROBE__.dispatchProbeEvent("start");
