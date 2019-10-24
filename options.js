@@ -75,5 +75,6 @@ exports.options = {
 	exceptionOnRedirect: false,
 	navigationTimeout: 10000,
 	bypassCSP: true,
-	simulateRealEvents: true
+	simulateRealEvents: true,
+	crawlmode: "linear" // linear || random
 };

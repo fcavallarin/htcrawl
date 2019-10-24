@@ -141,7 +141,13 @@ function initProbe(options, inputValues){
 	};
 
 
-
+	Probe.prototype.randomizeArray = function(arr) {
+		var a, ri;
+		for (a = arr.length - 1; a > 0; a--) {
+			ri = Math.floor(Math.random() * (a + 1));
+			[arr[a], arr[ri]] = [arr[ri], arr[a]];
+		}
+	};
 
 
 	// do NOT use MutationObserver to get added elements .. it is asynchronous and the callback is fired only when DOM is refreshed (graphically)
@@ -1075,7 +1081,11 @@ function initProbe(options, inputValues){
 			return;
 		}
 		//console.log(">>>>:" + layer)
-		var dom = [node == document ? document.documentElement : node].concat(this.getDOMTreeAsArray(node)),
+		var domArr = this.getDOMTreeAsArray(node);
+		if(this.options.crawlmode == "random"){
+			this.randomizeArray(domArr);
+		}
+		var dom = [node == document ? document.documentElement : node].concat(domArr),
 			newEls = [],
 			uRet;
 		// map propety events and fill input values
