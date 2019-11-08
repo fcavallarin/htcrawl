@@ -44,36 +44,36 @@ exports.Request = Request;
 	}
 
 
-	if(options.checkFetch){
-		window.fetch = ((_fetch) => async (url, options) => {
-			return await window.__PROBE__.fetchHook(_fetch, url, options);
-		})(window.fetch);
-	}
+	// if(options.checkFetch){
+	// 	window.fetch = ((_fetch) => async (url, options) => {
+	// 		return await window.__PROBE__.fetchHook(_fetch, url, options);
+	// 	})(window.fetch);
+	// }
 
-	if(options.checkAjax){
-		XMLHttpRequest.prototype.originalOpen = XMLHttpRequest.prototype.open;
-		XMLHttpRequest.prototype.open = function(method, url, async, user, password){
-			window.__PROBE__.xhrOpenHook(this, method, url);
-			return this.originalOpen(method, url, async, user, password);
-		}
+	// if(options.checkAjax){
+	// 	XMLHttpRequest.prototype.originalOpen = XMLHttpRequest.prototype.open;
+	// 	XMLHttpRequest.prototype.open = function(method, url, async, user, password){
+	// 		window.__PROBE__.xhrOpenHook(this, method, url);
+	// 		return this.originalOpen(method, url, async, user, password);
+	// 	}
 
-		XMLHttpRequest.prototype.originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-		XMLHttpRequest.prototype.setRequestHeader = async function(header, value){
-			this.__request.extra_headers[header] = value;
-			return this.originalSetRequestHeader(header, value);
-		};
+	// 	XMLHttpRequest.prototype.originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+	// 	XMLHttpRequest.prototype.setRequestHeader = async function(header, value){
+	// 		this.__request.extra_headers[header] = value;
+	// 		return this.originalSetRequestHeader(header, value);
+	// 	};
 
 
-		XMLHttpRequest.prototype.originalSend = XMLHttpRequest.prototype.send;
-		XMLHttpRequest.prototype.send = async function(data){
-			var uRet = await window.__PROBE__.xhrSendHook(this, data);
-			if(!this.__skipped && uRet)
-				return this.originalSend(data);
+	// 	XMLHttpRequest.prototype.originalSend = XMLHttpRequest.prototype.send;
+	// 	XMLHttpRequest.prototype.send = async function(data){
+	// 		var uRet = await window.__PROBE__.xhrSendHook(this, data);
+	// 		if(!this.__skipped && uRet)
+	// 			return this.originalSend(data);
 
-			return;
-		}
+	// 		return;
+	// 	}
 
-	}
+	// }
 
 
 	if(options.checkScriptInsertion){
@@ -335,6 +335,9 @@ function Request(type, method, url, data, trigger, extra_headers){
 	this.extra_headers = extra_headers || {};
 }
 
-
+Request.prototype.key = function(){
+	var key = "" + this.type + this.method + this.url + (this.data ? this.data : "") + (this.trigger ? this.trigger : "")
+	return key;
+};
 
 

@@ -108,7 +108,9 @@ function Crawler(targetUrl, options, browser){
 	this._browser = browser;
 	this._page = null;
 
-	this._requests =[];
+	this._trigger = {};
+	this._pendingRequests =[];
+	this._sentRequests = [];
 }
 
 
@@ -202,12 +204,8 @@ Crawler.prototype._afterNavigation = async function(resp){
 		_this._loaded = true;
 
 		await _this.dispatchProbeEvent("domcontentloaded", {});
-
 		await _this.waitForRequestsCompletion();
-
 		await _this.dispatchProbeEvent("pageinitialized", {});
-
-		
 
 		return _this;
 	}catch(e){
@@ -217,10 +215,11 @@ Crawler.prototype._afterNavigation = async function(resp){
 };
 
 Crawler.prototype.waitForRequestsCompletion = async function(){
+	await this._waitForRequestsCompletion();
 	await this._page.evaluate(async function(){ // use Promise.all ??
-		await window.__PROBE__.waitAjax();
+		//await window.__PROBE__.waitAjax();
 		await window.__PROBE__.waitJsonp();
-		await window.__PROBE__.waitFetch();
+		//await window.__PROBE__.waitFetch();
 	});
 };
 
@@ -297,6 +296,54 @@ Crawler.prototype.dispatchProbeEvent = async function(name, params) {
 	return true;
 }
 
+Crawler.prototype.handleRequest = async function(req){
+	let extrah = req.headers();
+	let type = req._resourceType; // xhr || fetch
+	delete extrah['referer'];
+	delete extrah['user-agent'];
+	let r = new utils.Request(type, req.method(), req.url().split("#")[0], req.postData(), this._trigger, extrah);
+	let rk = r.key();
+	if(this._sentRequests.indexOf(rk) != -1){
+		req.abort('aborted');
+		return;
+	}
+	for(let ex of this.options.excludedUrls){
+		if(r.url.match(ex)){
+			req.abort('aborted');
+			return;
+		}
+	}
+	// add to pending ajax before dispatchProbeEvent.
+	// Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
+	let ro = {p:req, h:r};
+	this._pendingRequests.push(ro);
+	let uRet = await this.dispatchProbeEvent(type, {request:r});
+	if(uRet){
+		req.continue();
+	} else {
+		this._pendingRequests.splice(this._pendingRequests.indexOf(ro), 1);
+		req.abort('aborted');
+	}
+}
+
+Crawler.prototype._waitForRequestsCompletion = function(){
+	var requests = this._pendingRequests;
+	var reqPerformed = false;
+	return new Promise( (resolve, reject) => {
+		var timeout = 1000 ;//_this.options.ajaxTimeout;
+
+		var t = setInterval(function(){
+			if(timeout <= 0 || requests.length == 0){
+				clearInterval(t);
+				//console.log("waitajax reoslve()")
+				resolve(reqPerformed);
+				return;
+			}
+			timeout -= 1;
+			reqPerformed = true;
+		}, 0);
+	});
+}
 
 Crawler.prototype.bootstrapPage = async function(browser){
 	var options = this.options,
@@ -320,6 +367,27 @@ Crawler.prototype.bootstrapPage = async function(browser){
 	if(options.bypassCSP){
 		await page.setBypassCSP(true);
 	}
+
+
+	setTimeout(async function reqloop(){
+		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
+			let r = crawler._pendingRequests[i];
+			let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
+			if(r.p.response()){
+				//console.log("Response for " + r.p.url());
+				await crawler.dispatchProbeEvent(events[r.h.type], {
+					request: r.h,
+					response: null // @TODO
+				});
+				crawler._pendingRequests.splice(i, 1);
+			}
+			if(r.p.failure()){
+				//console.log("*** FAILUREResponse for " + r.p.url())
+				crawler._pendingRequests.splice(i, 1);
+			}
+		}
+		setTimeout(reqloop, 50);
+	}, 50);
 
 	page.on('request', async req => {
 		const overrides = {};
@@ -361,6 +429,9 @@ Crawler.prototype.bootstrapPage = async function(browser){
 			crawler._firstRun = false;
 		}
 
+		if(req._resourceType == 'xhr' || req._resourceType == 'fetch'){
+			return await this.handleRequest(req);
+		}
 		req.continue(overrides);
 	});
 
@@ -376,6 +447,10 @@ Crawler.prototype.bootstrapPage = async function(browser){
 
 
 	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
+
+	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
+
+	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
 
 	 await page.setViewport({
 		width: 1366,
@@ -411,8 +486,6 @@ Crawler.prototype.bootstrapPage = async function(browser){
 		}
 
 		await this._page.setDefaultNavigationTimeout(this.options.navigationTimeout);
-
-		//if(options.verbose)console.log("goto returned")
 
 	}catch(e) {
 		// do something  . . .
