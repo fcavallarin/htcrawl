@@ -107,6 +107,8 @@ function Crawler(targetUrl, options, browser){
 
 	this._browser = browser;
 	this._page = null;
+
+	this._requests =[];
 }
 
 
@@ -229,10 +231,6 @@ Crawler.prototype.start = async function(){
 		await this.load();
 	}
 
-	setTimeout(function(){
-		_this.stop();
-	}, this.options.maxExecTime);
-
 	try {
 		await _this._page.evaluate(async function(){
 			//await window.__PROBE__.dispatchProbeEvent("start");
@@ -245,8 +243,7 @@ Crawler.prototype.start = async function(){
 		_this._errors.push(["navigation","navigation aborted"]);
 		//_this.dispatchProbeEvent("end", {});
 		throw e;
-	};
-
+	}
 }
 
 
@@ -323,6 +320,7 @@ Crawler.prototype.bootstrapPage = async function(browser){
 	if(options.bypassCSP){
 		await page.setBypassCSP(true);
 	}
+
 	page.on('request', async req => {
 		const overrides = {};
 		if(req.isNavigationRequest() && req.frame() == page.mainFrame()){

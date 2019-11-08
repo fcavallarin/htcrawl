@@ -18,7 +18,7 @@ exports.options = {
 	checkWebsockets: true,
 	searchUrls: true,
 	jsonOutput:true,
-	maxExecTime: 300000, // 300 seconds
+	maxExecTime: 300000, // 300 seconds - remove me!
 	ajaxTimeout:3000,
 	printAjaxPostData: true,
 	loadImages: false,

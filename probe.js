@@ -447,6 +447,7 @@ function initProbe(options, inputValues){
 			*/
 			e.preventDefault();
 			e.stopPropagation();
+			e.stopImmediatePropagation();
 		}
 
 		if ('createEvent' in document) {
@@ -581,8 +582,12 @@ function initProbe(options, inputValues){
 	};
 
 	Probe.prototype.getElementSelector = function(element){
-		if(!element || !(element instanceof HTMLElement))
+		if(!element || !(element instanceof HTMLElement)){
+			if(element instanceof SVGPathElement){
+				return "SVG";
+			}
 			return "";
+		}
 		var name = element.nodeName.toLowerCase();
 		var ret = [];
 		var selector = ""
@@ -999,6 +1004,7 @@ function initProbe(options, inputValues){
 			return false;
 		}
 		xhr.addEventListener("readystatechange", function ev(e){
+			var rt;
 			if(xhr.readyState != 4) return;
 			var i = _this._pendingAjax.indexOf(xhr);
 			if(i == -1){
@@ -1006,9 +1012,15 @@ function initProbe(options, inputValues){
 			} else {
 				_this._pendingAjax.splice(i, 1);
 			}
+			try{
+				rt = xhr.responseText;
+			} catch(e){
+				rt = JSON.stringify(xhr.response);
+			}
+
 			_this.dispatchProbeEvent("xhrCompleted", {
 				request: xhr.__request,
-				response: xhr.responseText
+				response: rt
 			});
 			xhr.removeEventListener("readystatechange", ev);
 		});
@@ -1152,6 +1164,9 @@ function initProbe(options, inputValues){
 					}
 
 					//console.log("added elements " + newEls.length)
+					if(this.options.crawlmode == "random"){
+						this.randomizeArray(newEls);
+					}
 					for(let ne of newEls){
 						uRet = await this.dispatchProbeEvent("newdom", {
 							rootNode: this.describeElement(ne),
