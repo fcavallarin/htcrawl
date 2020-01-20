@@ -16,11 +16,12 @@ const fs = require('fs');
 
 
 exports.parseCookiesFromHeaders = parseCookiesFromHeaders;
-exports.hookNativeFunctions = hookNativeFunctions;
+exports.initJs = initJs;
 exports.generateRandomValues = generateRandomValues;
 exports.Request = Request;
 
- function hookNativeFunctions(options) {
+
+ function initJs(options) {
 	//alert(window.__PROBE__)
 
 	if(options.mapEvents){
@@ -168,6 +169,11 @@ exports.Request = Request;
 	}
 
 	//window.__PROBE__.triggerUserEvent("onInit");
+	if(options.browserLocalstorage){
+		for(let l of options.browserLocalstorage){
+			window.localStorage.setItem(l[0] , l[1]);
+		}
+	}
 }
 
 

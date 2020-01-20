@@ -459,7 +459,8 @@ Crawler.prototype.bootstrapPage = async function(browser){
 
 	page.evaluateOnNewDocument(probe.initProbe, this.options, inputValues);
 	page.evaluateOnNewDocument(probeTextComparator.initTextComparator);
-	page.evaluateOnNewDocument(utils.hookNativeFunctions, this.options);
+	page.evaluateOnNewDocument(utils.initJs, this.options);
+
 
 	try{
 		if(options.referer){
@@ -474,7 +475,11 @@ Crawler.prototype.bootstrapPage = async function(browser){
 			if(!options.setCookies[i].expires)
 				options.setCookies[i].expires = parseInt((new Date()).getTime() / 1000) + (60*60*24*365);
 			//console.log(options.setCookies[i]);
-			await page.setCookie(options.setCookies[i]);
+			try{
+				await page.setCookie(options.setCookies[i]);
+			}catch (e){
+				//console.log(e)
+			}
 		}
 
 		if(options.httpAuth){
