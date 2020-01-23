@@ -374,10 +374,13 @@ Crawler.prototype.bootstrapPage = async function(browser){
 			let r = crawler._pendingRequests[i];
 			let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
 			if(r.p.response()){
-				//console.log("Response for " + r.p.url());
+				let rtxt = null;
+				try{
+					rtxt = await r.p.response().text();
+				} catch(e){}
 				await crawler.dispatchProbeEvent(events[r.h.type], {
 					request: r.h,
-					response: null // @TODO
+					response: rtxt
 				});
 				crawler._pendingRequests.splice(i, 1);
 			}
