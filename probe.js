@@ -41,9 +41,9 @@ function initProbe(options, inputValues){
 		this.html = "";
 		this.printedRequests = [];
 		this.DOMSnapshot = [];
-		this._pendingAjax = [];
+		//this._pendingAjax = [];
 		this._pendingJsonp = [];
-		this._pendingFetch = [];
+		//this._pendingFetch = [];
 		this._pendingWebsocket = [];
 		this._stop = false;
 		this.inputValues = inputValues;
@@ -518,12 +518,14 @@ function initProbe(options, inputValues){
 
 	Probe.prototype.triggerElementEvent = function(element, event){
 		var teObj = {el: element, ev: event};
-		this.curElement = {};
+		//this.curElement = {};
+		this.setTrigger({});
 		if(!event)return
 		if(!this.isEventTriggerable(event) || this.objectInArray(this.triggeredEvents, teObj))
 			return
-		this.curElement.element = element;
-		this.curElement.event = event;
+		//this.curElement.element = element;
+		//this.curElement.event = event;
+		this.setTrigger({element: element, event:event});
 		this.triggeredEvents.push(teObj);
 		this.trigger(element, event);
 	}
@@ -870,19 +872,19 @@ function initProbe(options, inputValues){
 	}
 
 
-	Probe.prototype.waitAjax = async function(){
-		await this.waitRequests(this._pendingAjax);
-		if(this._pendingAjax.length > 0) {
-			for(let req of this._pendingAjax){
-				await this.dispatchProbeEvent("xhrCompleted", {
-					request: req.__request,
-					response: null,
-					timedout: true
-				});
-			}
-		}
-		this._pendingAjax = [];
-	}
+	// Probe.prototype.waitAjax = async function(){
+	// 	await this.waitRequests(this._pendingAjax);
+	// 	if(this._pendingAjax.length > 0) {
+	// 		for(let req of this._pendingAjax){
+	// 			await this.dispatchProbeEvent("xhrCompleted", {
+	// 				request: req.__request,
+	// 				response: null,
+	// 				timedout: true
+	// 			});
+	// 		}
+	// 	}
+	// 	this._pendingAjax = [];
+	// }
 
 	Probe.prototype.waitJsonp = async function(){
 		await this.waitRequests(this._pendingJsonp);
@@ -898,19 +900,19 @@ function initProbe(options, inputValues){
 		this._pendingJsonp = [];
 	}
 
-	Probe.prototype.waitFetch = async function(){
-		await this.waitRequests(this._pendingFetch);
-		if(this._pendingFetch.length > 0) {
-			for(let req of this._pendingFetch){
-				await this.dispatchProbeEvent("fetchCompleted", {
-					request: req,
-					response: null,
-					timedout: true
-				});
-			}
-		}
-		this._pendingFetch = [];
-	}
+	// Probe.prototype.waitFetch = async function(){
+	// 	await this.waitRequests(this._pendingFetch);
+	// 	if(this._pendingFetch.length > 0) {
+	// 		for(let req of this._pendingFetch){
+	// 			await this.dispatchProbeEvent("fetchCompleted", {
+	// 				request: req,
+	// 				response: null,
+	// 				timedout: true
+	// 			});
+	// 		}
+	// 	}
+	// 	this._pendingFetch = [];
+	// }
 
 	Probe.prototype.waitWebsocket = async function(){
 		await this.waitRequests(this._pendingWebsocket);
@@ -920,116 +922,116 @@ function initProbe(options, inputValues){
 		this._pendingWebsocket = [];
 	}
 
-	Probe.prototype.fetchHook = async function(originalFetch, url, options){
-		var _this = this;
-		var method = options && 'method' in options ? options.method.toUpperCase() : "GET";
-		var data = options && 'body' in options ? options.body : null;
-		var trigger = this.getTrigger();
-		var extra_headers = {};
-		if(options  &&  options.headers && 'entries' in options.headers){
-			for(let h of options.headers.entries()){
-				extra_headers[h[0]] = h[1];
-			}
-		}
-		var request = new this.Request("fetch", method, url, data, trigger, extra_headers);
+	// Probe.prototype.fetchHook = async function(originalFetch, url, options){
+	// 	var _this = this;
+	// 	var method = options && 'method' in options ? options.method.toUpperCase() : "GET";
+	// 	var data = options && 'body' in options ? options.body : null;
+	// 	var trigger = this.getTrigger();
+	// 	var extra_headers = {};
+	// 	if(options  &&  options.headers && 'entries' in options.headers){
+	// 		for(let h of options.headers.entries()){
+	// 			extra_headers[h[0]] = h[1];
+	// 		}
+	// 	}
+	// 	var request = new this.Request("fetch", method, url, data, trigger, extra_headers);
 
-		var uRet = await this.dispatchProbeEvent("fetch", {
-			request: request
-		});
-		if(!uRet){
-			return new Promise( (resolve, reject) => reject(new Error("rejected"))); // @TODO
-		}
-		this._pendingFetch.push(request);
+	// 	var uRet = await this.dispatchProbeEvent("fetch", {
+	// 		request: request
+	// 	});
+	// 	if(!uRet){
+	// 		return new Promise( (resolve, reject) => reject(new Error("rejected"))); // @TODO
+	// 	}
+	// 	this._pendingFetch.push(request);
 
-		return new Promise( (resolve, reject) => {
-			originalFetch(url, options).then( resp => {
-				_this.dispatchProbeEvent("fetchCompleted", {
-					request: request,
-					//response: @ TODO
-				});
-				resolve(resp);
-			}).catch( e => {
-				_this.dispatchProbeEvent("fetchCompleted", {
-					request: request,
-					response: null,
-					error: "error" // @TODO
-				});
-				reject(e);
-			}).finally( () => {
-				var i = _this._pendingFetch.indexOf(request);
-				if(i == -1){
-					//ERROR!!!
-				} else {
-					_this._pendingFetch.splice(i, 1);
-				}
-			});
-		})
-	}
+	// 	return new Promise( (resolve, reject) => {
+	// 		originalFetch(url, options).then( resp => {
+	// 			_this.dispatchProbeEvent("fetchCompleted", {
+	// 				request: request,
+	// 				//response: @ TODO
+	// 			});
+	// 			resolve(resp);
+	// 		}).catch( e => {
+	// 			_this.dispatchProbeEvent("fetchCompleted", {
+	// 				request: request,
+	// 				response: null,
+	// 				error: "error" // @TODO
+	// 			});
+	// 			reject(e);
+	// 		}).finally( () => {
+	// 			var i = _this._pendingFetch.indexOf(request);
+	// 			if(i == -1){
+	// 				//ERROR!!!
+	// 			} else {
+	// 				_this._pendingFetch.splice(i, 1);
+	// 			}
+	// 		});
+	// 	})
+	// }
 
-	Probe.prototype.xhrOpenHook = function(xhr, method, url){
-		var _url = this.removeUrlParameter(url, "_");
-		xhr.__request = new window.__PROBE__.Request("xhr", method, _url, null, this.getTrigger());
-	}
-
-
-	Probe.prototype.xhrSendHook = async function(xhr, data){
-		var _this = this;
-		xhr.__request.data = data;
-
-		var absurl = this.getAbsoluteUrl(xhr.__request.url);
-		for(var a = 0; a < options.excludedUrls.length; a++){
-			if(absurl.match(options.excludedUrls[a])){
-				xhr.__skipped = true;
-			}
-		}
-
-		// check if request has already been sent
-		var rk = xhr.__request.key();
-		if(this.sentAjax.indexOf(rk) != -1){
-			return;
-		}
+	// Probe.prototype.xhrOpenHook = function(xhr, method, url){
+	// 	var _url = this.removeUrlParameter(url, "_");
+	// 	xhr.__request = new window.__PROBE__.Request("xhr", method, _url, null, this.getTrigger());
+	// }
 
 
-		// add to pending ajax before dispatchProbeEvent. Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
-		if(!xhr.__skipped){
-			this._pendingAjax.push(xhr);
-		}
+	// Probe.prototype.xhrSendHook = async function(xhr, data){
+	// 	var _this = this;
+	// 	xhr.__request.data = data;
 
-		var uRet = await this.dispatchProbeEvent("xhr", {
-			request: xhr.__request
-		});
+	// 	var absurl = this.getAbsoluteUrl(xhr.__request.url);
+	// 	for(var a = 0; a < options.excludedUrls.length; a++){
+	// 		if(absurl.match(options.excludedUrls[a])){
+	// 			xhr.__skipped = true;
+	// 		}
+	// 	}
 
-		if(!uRet){
-			this._pendingAjax.splice(this._pendingAjax.indexOf(xhr), 1);
-			return false;
-		}
-		xhr.addEventListener("readystatechange", function ev(e){
-			var rt;
-			if(xhr.readyState != 4) return;
-			var i = _this._pendingAjax.indexOf(xhr);
-			if(i == -1){
-				//ERROR!!!
-			} else {
-				_this._pendingAjax.splice(i, 1);
-			}
-			try{
-				rt = xhr.responseText;
-			} catch(e){
-				rt = JSON.stringify(xhr.response);
-			}
+	// 	// check if request has already been sent
+	// 	var rk = xhr.__request.key();
+	// 	if(this.sentAjax.indexOf(rk) != -1){
+	// 		return;
+	// 	}
 
-			_this.dispatchProbeEvent("xhrCompleted", {
-				request: xhr.__request,
-				response: rt
-			});
-			xhr.removeEventListener("readystatechange", ev);
-		});
 
-		this.sentAjax.push(rk);
+	// 	// add to pending ajax before dispatchProbeEvent. Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
+	// 	if(!xhr.__skipped){
+	// 		this._pendingAjax.push(xhr);
+	// 	}
 
-		return true;
+	// 	var uRet = await this.dispatchProbeEvent("xhr", {
+	// 		request: xhr.__request
+	// 	});
 
-	}
+	// 	if(!uRet){
+	// 		this._pendingAjax.splice(this._pendingAjax.indexOf(xhr), 1);
+	// 		return false;
+	// 	}
+	// 	xhr.addEventListener("readystatechange", function ev(e){
+	// 		var rt;
+	// 		if(xhr.readyState != 4) return;
+	// 		var i = _this._pendingAjax.indexOf(xhr);
+	// 		if(i == -1){
+	// 			//ERROR!!!
+	// 		} else {
+	// 			_this._pendingAjax.splice(i, 1);
+	// 		}
+	// 		try{
+	// 			rt = xhr.responseText;
+	// 		} catch(e){
+	// 			rt = JSON.stringify(xhr.response);
+	// 		}
+
+	// 		_this.dispatchProbeEvent("xhrCompleted", {
+	// 			request: xhr.__request,
+	// 			response: rt
+	// 		});
+	// 		xhr.removeEventListener("readystatechange", ev);
+	// 	});
+
+	// 	this.sentAjax.push(rk);
+
+	// 	return true;
+
+	// }
 
 
 	Probe.prototype.websocketHook =  function(ws, url){
@@ -1083,7 +1085,10 @@ function initProbe(options, inputValues){
 	};
 
 
-
+	Probe.prototype.setTrigger = function(value){
+		this.curElement = value;
+		window.__htcrawl_set_trigger__(this.getTrigger()); // should be awaited...
+	}
 
 	Probe.prototype.crawlDOM = async function(node, layer){
 		if(this._stop) return;
@@ -1094,6 +1099,8 @@ function initProbe(options, inputValues){
 		}
 		//console.log(">>>>:" + layer)
 		var domArr = this.getDOMTreeAsArray(node);
+		//this.curElement = {};
+		this.setTrigger({});
 		if(this.options.crawlmode == "random"){
 			this.randomizeArray(domArr);
 		}
@@ -1113,7 +1120,7 @@ function initProbe(options, inputValues){
 			if(this._stop) return;
 			let elsel = this.getElementSelector(el);
 			if(!this.isAttachedToDOM(el)){
-				console.log("!!00>>> " + this.stringifyElement(el) + " detached before analysis !!! results may be incomplete")
+				//console.log("!!00>>> " + this.stringifyElement(el) + " detached before analysis !!! results may be incomplete")
 				uRet = await this.dispatchProbeEvent("earlydetach", { node: elsel });
 				if(!uRet) continue;
 			}
@@ -1131,19 +1138,22 @@ function initProbe(options, inputValues){
 					await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
 				}
 
-				if(this._pendingAjax.length > 0) {
-					let chainLimit = this.options.maximumAjaxChain;
-					do {
-						chainLimit--;
-						if(chainLimit == 0){
-							break;
-						}
-						await this.sleep(0);
-					} while(await this.waitAjax());
-				}
+				// if(this._pendingAjax.length > 0) {
+				// 	let chainLimit = this.options.maximumAjaxChain;
+				// 	do {
+				// 		chainLimit--;
+				// 		if(chainLimit == 0){
+				// 			break;
+				// 		}
+				// 		await this.sleep(0);
+				// 	} while(await this.waitAjax());
+				// }
 
-				if(this._pendingFetch.length > 0)
-					await this.waitFetch();
+				await window.__htcrawl_wait_requests__();
+
+
+				// if(this._pendingFetch.length > 0)
+				// 	await this.waitFetch();
 				if(this._pendingJsonp.length > 0)
 					await this.waitJsonp();
 				if(this._pendingWebsocket.length > 0)

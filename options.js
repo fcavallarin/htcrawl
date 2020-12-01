@@ -73,8 +73,9 @@ exports.options = {
 	extraHeaders: false,
 	openChromeDevtoos: false,
 	exceptionOnRedirect: false,
-	navigationTimeout: 10000,
+	navigationTimeout: 20000,
 	bypassCSP: true,
 	simulateRealEvents: true,
-	crawlmode: "linear" // linear || random
+	crawlmode: "linear", // linear || random
+	browserLocalstorage: null
 };
