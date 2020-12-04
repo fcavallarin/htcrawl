@@ -58,7 +58,47 @@ function initProbe(options, inputValues){
 		this.setTimeout = window.setTimeout.bind(window);
 		this.setInterval = window.setInterval.bind(window);
 
+
+
+		this.DOMMutations = [];
+		this.DOMMutationsToPop = [];
+
 	};
+
+
+
+	Probe.prototype.getRootNodes = function(elements){
+		const rootElements = [];
+		for(var a = 0; a < elements.length; a++){
+			var p = elements[a];
+			var root = null;
+			// find the farest parent between added elements
+			while(p){
+				if(elements.indexOf(p) != -1){
+					root = p;
+				}
+				//console.log(p)
+				p = p.parentNode;
+			}
+			if(root && rootElements.indexOf(root) == -1){
+				rootElements.push(root);
+			}
+		}
+
+		return rootElements;
+	}
+
+
+
+	Probe.prototype.popMutation = function(){
+		const roots = this.getRootNodes(this.DOMMutations)
+		//console.log(roots)
+		this.DOMMutations = [];
+		this.DOMMutationsToPop = this.DOMMutationsToPop.concat(roots);
+		const first = this.DOMMutationsToPop.splice(0,1);
+		return first.length == 1 ? first[0] : null;
+	}
+
 
 
 	Probe.prototype.objectInArray  = function(arr, el, ignoreProperties){
@@ -150,80 +190,80 @@ function initProbe(options, inputValues){
 	};
 
 
-	// do NOT use MutationObserver to get added elements .. it is asynchronous and the callback is fired only when DOM is refreshed (graphically)
-	Probe.prototype.takeDOMSnapshot = function(){
-		this.DOMSnapshot = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
-		return;
-		var els = document.getElementsByTagName("*");
-		for(var a = 0; a < els.length; a++){
-			if(!els[a].__snapshot)
-				els[a].__snapshot = true;
-		}
-	}
+	// // do NOT use MutationObserver to get added elements .. it is asynchronous and the callback is fired only when DOM is refreshed (graphically)
+	// Probe.prototype.takeDOMSnapshot = function(){
+	// 	this.DOMSnapshot = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
+	// 	return;
+	// 	var els = document.getElementsByTagName("*");
+	// 	for(var a = 0; a < els.length; a++){
+	// 		if(!els[a].__snapshot)
+	// 			els[a].__snapshot = true;
+	// 	}
+	// }
 
 
-	Probe.prototype.getAddedElements = function(){
-		var elements = []
-		var rootElements = []
-		var ueRet = null;
-		var newDom = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
+	// Probe.prototype.getAddedElements = function(){
+	// 	var elements = []
+	// 	var rootElements = []
+	// 	var ueRet = null;
+	// 	var newDom = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
 
-		//*/console.log('get added elements start dom len: ' + this.DOMSnapshot.length + ' new dom len: ' + newDom.length);
-		// get all added elements
-		for(var a = 0;a < newDom.length;a++){
-			if(this.DOMSnapshot.indexOf(newDom[a]) == -1) {
-			//if(!newDom[a].__snapshot){
-				// set __new flag on added elements to avoid checking for elments.indexOf
-				// that is very very slow
-				newDom[a].__new = true;
-				elements.push(newDom[a]);
-			}
-		}
+	// 	//*/console.log('get added elements start dom len: ' + this.DOMSnapshot.length + ' new dom len: ' + newDom.length);
+	// 	// get all added elements
+	// 	for(var a = 0;a < newDom.length;a++){
+	// 		if(this.DOMSnapshot.indexOf(newDom[a]) == -1) {
+	// 		//if(!newDom[a].__snapshot){
+	// 			// set __new flag on added elements to avoid checking for elments.indexOf
+	// 			// that is very very slow
+	// 			newDom[a].__new = true;
+	// 			elements.push(newDom[a]);
+	// 		}
+	// 	}
 
-		///console.log("elements get... (tot "+elements.length+") searching for root nodes")
+	// 	///console.log("elements get... (tot "+elements.length+") searching for root nodes")
 
-		for(var a = 0; a < elements.length; a++){
-			var p = elements[a];
-			var root = null;
-			// find the farest parent between added elements
-			while(p){
-				//if(elements.indexOf(p) != -1){
-				if(p.__new){
-					root = p;
-				}
-				p = p.parentNode;
-			}
-			if(root && rootElements.indexOf(root) == -1){
-				rootElements.push(root);
-			}
-		}
+	// 	for(var a = 0; a < elements.length; a++){
+	// 		var p = elements[a];
+	// 		var root = null;
+	// 		// find the farest parent between added elements
+	// 		while(p){
+	// 			//if(elements.indexOf(p) != -1){
+	// 			if(p.__new){
+	// 				root = p;
+	// 			}
+	// 			p = p.parentNode;
+	// 		}
+	// 		if(root && rootElements.indexOf(root) == -1){
+	// 			rootElements.push(root);
+	// 		}
+	// 	}
 
-		for(var a = 0; a < elements.length; a++){
-			delete elements[a].__new;
-		}
+	// 	for(var a = 0; a < elements.length; a++){
+	// 		delete elements[a].__new;
+	// 	}
 
-		return rootElements;
-	}
-
-
+	// 	return rootElements;
+	// }
 
 
-	/* DO NOT include node as first element.. this is a requirement */
-	Probe.prototype.getDOMTreeAsArray = function(node){
-		var out = [];
-		var children = node.querySelectorAll(":scope > *");
 
-		if(children.length == 0){
-			return out;
-		}
 
-		for(var a = 0; a < children.length; a++){
-			out.push(children[a]);
-			out = out.concat(this.getDOMTreeAsArray(children[a]));
-		}
+	// /* DO NOT include node as first element.. this is a requirement */
+	// Probe.prototype.getDOMTreeAsArray = function(node){
+	// 	var out = [];
+	// 	var children = node.querySelectorAll(":scope > *");
 
-		return out;
-	}
+	// 	if(children.length == 0){
+	// 		return out;
+	// 	}
+
+	// 	for(var a = 0; a < children.length; a++){
+	// 		out.push(children[a]);
+	// 		out = out.concat(this.getDOMTreeAsArray(children[a]));
+	// 	}
+
+	// 	return out;
+	// }
 
 
 
@@ -377,15 +417,6 @@ function initProbe(options, inputValues){
 	};
 
 
-	// Probe.prototype.getRandomValue = function(type){
-
-	// 	if(!(type in this.inputValues))
-	// 		type = "string";
-
-	// 	return this.inputValues[type];
-
-	// };
-
 
 	Probe.prototype.getStaticInputValue = function(input){
 		if(!this.options.staticInputValues.length )
@@ -492,15 +523,15 @@ function initProbe(options, inputValues){
 		var events = [];
 		var map;
 
-		if(this.options.triggerAllMappedEvents){
-			map = this.eventsMap;
-			for(var a = 0; a < map.length; a++){
-				if(map[a].element == element){
-					events = map[a].events.slice();
-					break;
-				}
-			}
-		}
+		// if(this.options.triggerAllMappedEvents){
+		// 	map = this.eventsMap;
+		// 	for(var a = 0; a < map.length; a++){
+		// 		if(map[a].element == element){
+		// 			events = map[a].events.slice();
+		// 			break;
+		// 		}
+		// 	}
+		// }
 
 		map = this.options.eventsMap;
 		for(var selector in map){
@@ -615,26 +646,25 @@ function initProbe(options, inputValues){
 	}
 
 
-	Probe.prototype.initializeElement = async function(element){
-		var options = this.options;
+	// Probe.prototype.initializeElement = async function(element){
+	// 	var options = this.options;
 
-		if(options.mapEvents){
-			var els = element.getElementsByTagName("*");
-			for(var a = 0; a < els.length; a++){
-				for(var b = 0; b < options.allEvents.length; b++){
-					var evname = "on" + options.allEvents[b];
-					if(evname in els[a] && els[a][evname]){
-						this.addEventToMap(els[a], options.allEvents[b]);
-					}
-				}
-			}
-		}
+	// 	if(options.mapEvents){
+	// 		var els = element.getElementsByTagName("*");
+	// 		for(var a = 0; a < els.length; a++){
+	// 			for(var b = 0; b < options.allEvents.length; b++){
+	// 				var evname = "on" + options.allEvents[b];
+	// 				if(evname in els[a] && els[a][evname]){
+	// 					this.addEventToMap(els[a], options.allEvents[b]);
+	// 				}
+	// 			}
+	// 		}
+	// 	}
 
-
-		if(options.fillValues){
-			await this.fillInputValues(element);
-		}
-	}
+	// 	if(options.fillValues){
+	// 		await this.fillInputValues(element);
+	// 	}
+	// }
 
 
 
@@ -720,27 +750,27 @@ function initProbe(options, inputValues){
 
 
 
-	Probe.prototype.startAnalysis = async function(){
-		console.log("page initialized ");
-		var _this = this;
-		this.started_at = (new Date()).getTime();
-		await this.crawlDOM(document);
-		console.log("DOM analyzed ");
-	};
+	// Probe.prototype.startAnalysis = async function(){
+	// 	console.log("page initialized ");
+	// 	var _this = this;
+	// 	this.started_at = (new Date()).getTime();
+	// 	await this.crawlDOM(document);
+	// 	console.log("DOM analyzed ");
+	// };
 
 
 
-	Probe.prototype.isContentDuplicated = function(cont){
-		return this.domModifications.indexOf(cont) != -1;
+	// Probe.prototype.isContentDuplicated = function(cont){
+	// 	return this.domModifications.indexOf(cont) != -1;
 
-		// for(let m of this.domModifications){
-		// 	if(this.textComparator.compare(cont, m)){
-		// 		return true;
-		// 	}
-		// }
-		// return false;
+	// 	// for(let m of this.domModifications){
+	// 	// 	if(this.textComparator.compare(cont, m)){
+	// 	// 		return true;
+	// 	// 	}
+	// 	// }
+	// 	// return false;
 
-	}
+	// }
 
 	Probe.prototype.simhashDistance = function(s1, s2){
 		var x = (s1 ^ s2) & ((1 << 64) - 1);
@@ -872,19 +902,6 @@ function initProbe(options, inputValues){
 	}
 
 
-	// Probe.prototype.waitAjax = async function(){
-	// 	await this.waitRequests(this._pendingAjax);
-	// 	if(this._pendingAjax.length > 0) {
-	// 		for(let req of this._pendingAjax){
-	// 			await this.dispatchProbeEvent("xhrCompleted", {
-	// 				request: req.__request,
-	// 				response: null,
-	// 				timedout: true
-	// 			});
-	// 		}
-	// 	}
-	// 	this._pendingAjax = [];
-	// }
 
 	Probe.prototype.waitJsonp = async function(){
 		await this.waitRequests(this._pendingJsonp);
@@ -900,19 +917,6 @@ function initProbe(options, inputValues){
 		this._pendingJsonp = [];
 	}
 
-	// Probe.prototype.waitFetch = async function(){
-	// 	await this.waitRequests(this._pendingFetch);
-	// 	if(this._pendingFetch.length > 0) {
-	// 		for(let req of this._pendingFetch){
-	// 			await this.dispatchProbeEvent("fetchCompleted", {
-	// 				request: req,
-	// 				response: null,
-	// 				timedout: true
-	// 			});
-	// 		}
-	// 	}
-	// 	this._pendingFetch = [];
-	// }
 
 	Probe.prototype.waitWebsocket = async function(){
 		await this.waitRequests(this._pendingWebsocket);
@@ -921,117 +925,6 @@ function initProbe(options, inputValues){
 		}
 		this._pendingWebsocket = [];
 	}
-
-	// Probe.prototype.fetchHook = async function(originalFetch, url, options){
-	// 	var _this = this;
-	// 	var method = options && 'method' in options ? options.method.toUpperCase() : "GET";
-	// 	var data = options && 'body' in options ? options.body : null;
-	// 	var trigger = this.getTrigger();
-	// 	var extra_headers = {};
-	// 	if(options  &&  options.headers && 'entries' in options.headers){
-	// 		for(let h of options.headers.entries()){
-	// 			extra_headers[h[0]] = h[1];
-	// 		}
-	// 	}
-	// 	var request = new this.Request("fetch", method, url, data, trigger, extra_headers);
-
-	// 	var uRet = await this.dispatchProbeEvent("fetch", {
-	// 		request: request
-	// 	});
-	// 	if(!uRet){
-	// 		return new Promise( (resolve, reject) => reject(new Error("rejected"))); // @TODO
-	// 	}
-	// 	this._pendingFetch.push(request);
-
-	// 	return new Promise( (resolve, reject) => {
-	// 		originalFetch(url, options).then( resp => {
-	// 			_this.dispatchProbeEvent("fetchCompleted", {
-	// 				request: request,
-	// 				//response: @ TODO
-	// 			});
-	// 			resolve(resp);
-	// 		}).catch( e => {
-	// 			_this.dispatchProbeEvent("fetchCompleted", {
-	// 				request: request,
-	// 				response: null,
-	// 				error: "error" // @TODO
-	// 			});
-	// 			reject(e);
-	// 		}).finally( () => {
-	// 			var i = _this._pendingFetch.indexOf(request);
-	// 			if(i == -1){
-	// 				//ERROR!!!
-	// 			} else {
-	// 				_this._pendingFetch.splice(i, 1);
-	// 			}
-	// 		});
-	// 	})
-	// }
-
-	// Probe.prototype.xhrOpenHook = function(xhr, method, url){
-	// 	var _url = this.removeUrlParameter(url, "_");
-	// 	xhr.__request = new window.__PROBE__.Request("xhr", method, _url, null, this.getTrigger());
-	// }
-
-
-	// Probe.prototype.xhrSendHook = async function(xhr, data){
-	// 	var _this = this;
-	// 	xhr.__request.data = data;
-
-	// 	var absurl = this.getAbsoluteUrl(xhr.__request.url);
-	// 	for(var a = 0; a < options.excludedUrls.length; a++){
-	// 		if(absurl.match(options.excludedUrls[a])){
-	// 			xhr.__skipped = true;
-	// 		}
-	// 	}
-
-	// 	// check if request has already been sent
-	// 	var rk = xhr.__request.key();
-	// 	if(this.sentAjax.indexOf(rk) != -1){
-	// 		return;
-	// 	}
-
-
-	// 	// add to pending ajax before dispatchProbeEvent. Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
-	// 	if(!xhr.__skipped){
-	// 		this._pendingAjax.push(xhr);
-	// 	}
-
-	// 	var uRet = await this.dispatchProbeEvent("xhr", {
-	// 		request: xhr.__request
-	// 	});
-
-	// 	if(!uRet){
-	// 		this._pendingAjax.splice(this._pendingAjax.indexOf(xhr), 1);
-	// 		return false;
-	// 	}
-	// 	xhr.addEventListener("readystatechange", function ev(e){
-	// 		var rt;
-	// 		if(xhr.readyState != 4) return;
-	// 		var i = _this._pendingAjax.indexOf(xhr);
-	// 		if(i == -1){
-	// 			//ERROR!!!
-	// 		} else {
-	// 			_this._pendingAjax.splice(i, 1);
-	// 		}
-	// 		try{
-	// 			rt = xhr.responseText;
-	// 		} catch(e){
-	// 			rt = JSON.stringify(xhr.response);
-	// 		}
-
-	// 		_this.dispatchProbeEvent("xhrCompleted", {
-	// 			request: xhr.__request,
-	// 			response: rt
-	// 		});
-	// 		xhr.removeEventListener("readystatechange", ev);
-	// 	});
-
-	// 	this.sentAjax.push(rk);
-
-	// 	return true;
-
-	// }
 
 
 	Probe.prototype.websocketHook =  function(ws, url){
@@ -1090,108 +983,6 @@ function initProbe(options, inputValues){
 		window.__htcrawl_set_trigger__(this.getTrigger()); // should be awaited...
 	}
 
-	Probe.prototype.crawlDOM = async function(node, layer){
-		if(this._stop) return;
-		layer = typeof layer != 'undefined' ? layer : 0;
-		if(layer == this.options.maximumRecursion){
-			console.log(">>>>RECURSON LIMIT REACHED :" + layer)
-			return;
-		}
-		//console.log(">>>>:" + layer)
-		var domArr = this.getDOMTreeAsArray(node);
-		//this.curElement = {};
-		this.setTrigger({});
-		if(this.options.crawlmode == "random"){
-			this.randomizeArray(domArr);
-		}
-		var dom = [node == document ? document.documentElement : node].concat(domArr),
-			newEls = [],
-			uRet;
-		// map propety events and fill input values
-		await this.initializeElement(node);
-
-		//if(node == document){
-		if(layer == 0){
-			await this.dispatchProbeEvent("start");
-		}
-
-		//let analyzed = 0;
-		for(let el of dom){
-			if(this._stop) return;
-			let elsel = this.getElementSelector(el);
-			if(!this.isAttachedToDOM(el)){
-				//console.log("!!00>>> " + this.stringifyElement(el) + " detached before analysis !!! results may be incomplete")
-				uRet = await this.dispatchProbeEvent("earlydetach", { node: elsel });
-				if(!uRet) continue;
-			}
-			for(let event of this.getEventsForElement(el)){
-				if(this._stop) return;
-				//console.log("analyze element " + this.describeElement(el));
-				this.takeDOMSnapshot();
-				if(options.triggerEvents){
-					uRet = await this.dispatchProbeEvent("triggerevent", {node: elsel, event: event});
-					if(!uRet) continue;
-
-					this.triggerElementEvent(el, event);
-					// if click has been trigered stop mousedown /up !!!
-
-					await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
-				}
-
-				// if(this._pendingAjax.length > 0) {
-				// 	let chainLimit = this.options.maximumAjaxChain;
-				// 	do {
-				// 		chainLimit--;
-				// 		if(chainLimit == 0){
-				// 			break;
-				// 		}
-				// 		await this.sleep(0);
-				// 	} while(await this.waitAjax());
-				// }
-
-				await window.__htcrawl_wait_requests__();
-
-
-				// if(this._pendingFetch.length > 0)
-				// 	await this.waitFetch();
-				if(this._pendingJsonp.length > 0)
-					await this.waitJsonp();
-				if(this._pendingWebsocket.length > 0)
-					await this.waitWebsocket();
-
-				newEls = this.getAddedElements();
-				for(var a = newEls.length - 1; a >= 0; a--){
-					if(newEls[a].innerText && this.isContentDuplicated(newEls[a].innerText))
-						newEls.splice(a,1);
-				}
-				if(newEls.length > 0){
-					for(var a = 0; a < newEls.length; a++){
-						if(newEls[a].innerText){
-							this.domModifications.push(newEls[a].innerText);
-							//this.domModifications.push(this.textComparator.getValue(newEls[a].innerText));
-							console.log(this.textComparator.getValue(newEls[a].innerText))
-						}
-					}
-
-					//console.log("added elements " + newEls.length)
-					if(this.options.crawlmode == "random"){
-						this.randomizeArray(newEls);
-					}
-					for(let ne of newEls){
-						uRet = await this.dispatchProbeEvent("newdom", {
-							rootNode: this.describeElement(ne),
-							trigger: this.getTrigger(),
-							layer: layer
-						});
-						if(uRet)
-							await this.crawlDOM(ne, layer + 1);
-					}
-
-				}
-			}
-
-		}
-	}
 
 	Probe.prototype.sleep = function(n){
 		var _this = this;

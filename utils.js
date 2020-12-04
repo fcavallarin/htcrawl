@@ -22,60 +22,6 @@ exports.Request = Request;
 
 
  function initJs(options) {
-	//alert(window.__PROBE__)
-
-	if(options.mapEvents){
-
-		Node.prototype.originaladdEventListener = Node.prototype.addEventListener;
-		Node.prototype.addEventListener = function(event, func, useCapture){
-			if(event != "DOMContentLoaded"){ // is this ok???
-				window.__PROBE__.addEventToMap(this, event);
-			}
-			this.originaladdEventListener(event, func, useCapture);
-		};
-
-		window.addEventListener = (function(originalAddEventListener){
-			return function(event, func, useCapture){
-				if(event != "load"){ // is this ok???
-					window.__PROBE__.addEventToMap(this, event);
-				}
-				originalAddEventListener.apply(this,[event, func, useCapture]);
-			}
-		})(window.addEventListener);
-	}
-
-
-	// if(options.checkFetch){
-	// 	window.fetch = ((_fetch) => async (url, options) => {
-	// 		return await window.__PROBE__.fetchHook(_fetch, url, options);
-	// 	})(window.fetch);
-	// }
-
-	// if(options.checkAjax){
-	// 	XMLHttpRequest.prototype.originalOpen = XMLHttpRequest.prototype.open;
-	// 	XMLHttpRequest.prototype.open = function(method, url, async, user, password){
-	// 		window.__PROBE__.xhrOpenHook(this, method, url);
-	// 		return this.originalOpen(method, url, async, user, password);
-	// 	}
-
-	// 	XMLHttpRequest.prototype.originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-	// 	XMLHttpRequest.prototype.setRequestHeader = async function(header, value){
-	// 		this.__request.extra_headers[header] = value;
-	// 		return this.originalSetRequestHeader(header, value);
-	// 	};
-
-
-	// 	XMLHttpRequest.prototype.originalSend = XMLHttpRequest.prototype.send;
-	// 	XMLHttpRequest.prototype.send = async function(data){
-	// 		var uRet = await window.__PROBE__.xhrSendHook(this, data);
-	// 		if(!this.__skipped && uRet)
-	// 			return this.originalSend(data);
-
-	// 		return;
-	// 	}
-
-	// }
-
 
 	if(options.checkScriptInsertion){
 
@@ -130,31 +76,25 @@ exports.Request = Request;
 
 
 
-	// Node.prototype.originalRemoveEventListener = Node.prototype.removeEventListener;
-	// Node.prototype.removeEventListener = function(type, listener, options){
-	// };
-
-	Node.prototype.originalRemoveChild = Node.prototype.removeChild;
-	Node.prototype.removeChild = function(node){
-		if(!node.__analyzed){
-			//console.log("elem not analyzed "+ window.__PROBE__.stringifyElement(node) )
-			//console.log(window.__PROBE__.getTrigger());
-		}
-		this.__removed = true;
-		if(this instanceof HTMLElement){
-			for (let c of this.getElementsByTagName("*"))
-				c.__removed = true;
-		}
-		return this.originalRemoveChild(node);
-	}
+	// // @TODO is this needed???
+	// Node.prototype.originalRemoveChild = Node.prototype.removeChild;
+	// Node.prototype.removeChild = function(node){
+	// 	if(!node.__analyzed){
+	// 		//console.log("elem not analyzed "+ window.__PROBE__.stringifyElement(node) )
+	// 		//console.log(window.__PROBE__.getTrigger());
+	// 	}
+	// 	this.__removed = true;
+	// 	if(this instanceof HTMLElement){
+	// 		for (let c of this.getElementsByTagName("*"))
+	// 			c.__removed = true;
+	// 	}
+	// 	return this.originalRemoveChild(node);
+	// }
 
 
 
 	HTMLFormElement.prototype.originalSubmit = HTMLFormElement.prototype.submit;
 	HTMLFormElement.prototype.submit = function(){
-		//console.log("=-->"+this.action)
-		// var req = window.__PROBE__.getFormAsRequest(this);
-		// window.__PROBE__.printRequest(req);
 		window.__PROBE__.triggerFormSubmitEvent(this);
 		return this.originalSubmit();
 	}
@@ -164,16 +104,19 @@ exports.Request = Request;
 	window.print = function(){ return };
 
 	window.open = function(url, name, specs, replace){
-		//window.__PROBE__.printLink(url);
 		window.__PROBE__.triggerNavigationEvent(url);
 	}
 
-	//window.__PROBE__.triggerUserEvent("onInit");
 	if(options.browserLocalstorage){
+
 		for(let l of options.browserLocalstorage){
+			//console.log(l)
 			window.localStorage.setItem(l[0] , l[1]);
 		}
 	}
+
+
+
 }
 
 
