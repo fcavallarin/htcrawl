@@ -190,83 +190,6 @@ function initProbe(options, inputValues){
 	};
 
 
-	// // do NOT use MutationObserver to get added elements .. it is asynchronous and the callback is fired only when DOM is refreshed (graphically)
-	// Probe.prototype.takeDOMSnapshot = function(){
-	// 	this.DOMSnapshot = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
-	// 	return;
-	// 	var els = document.getElementsByTagName("*");
-	// 	for(var a = 0; a < els.length; a++){
-	// 		if(!els[a].__snapshot)
-	// 			els[a].__snapshot = true;
-	// 	}
-	// }
-
-
-	// Probe.prototype.getAddedElements = function(){
-	// 	var elements = []
-	// 	var rootElements = []
-	// 	var ueRet = null;
-	// 	var newDom = Array.prototype.slice.call( document.getElementsByTagName("*"), 0 );
-
-	// 	//*/console.log('get added elements start dom len: ' + this.DOMSnapshot.length + ' new dom len: ' + newDom.length);
-	// 	// get all added elements
-	// 	for(var a = 0;a < newDom.length;a++){
-	// 		if(this.DOMSnapshot.indexOf(newDom[a]) == -1) {
-	// 		//if(!newDom[a].__snapshot){
-	// 			// set __new flag on added elements to avoid checking for elments.indexOf
-	// 			// that is very very slow
-	// 			newDom[a].__new = true;
-	// 			elements.push(newDom[a]);
-	// 		}
-	// 	}
-
-	// 	///console.log("elements get... (tot "+elements.length+") searching for root nodes")
-
-	// 	for(var a = 0; a < elements.length; a++){
-	// 		var p = elements[a];
-	// 		var root = null;
-	// 		// find the farest parent between added elements
-	// 		while(p){
-	// 			//if(elements.indexOf(p) != -1){
-	// 			if(p.__new){
-	// 				root = p;
-	// 			}
-	// 			p = p.parentNode;
-	// 		}
-	// 		if(root && rootElements.indexOf(root) == -1){
-	// 			rootElements.push(root);
-	// 		}
-	// 	}
-
-	// 	for(var a = 0; a < elements.length; a++){
-	// 		delete elements[a].__new;
-	// 	}
-
-	// 	return rootElements;
-	// }
-
-
-
-
-	// /* DO NOT include node as first element.. this is a requirement */
-	// Probe.prototype.getDOMTreeAsArray = function(node){
-	// 	var out = [];
-	// 	var children = node.querySelectorAll(":scope > *");
-
-	// 	if(children.length == 0){
-	// 		return out;
-	// 	}
-
-	// 	for(var a = 0; a < children.length; a++){
-	// 		out.push(children[a]);
-	// 		out = out.concat(this.getDOMTreeAsArray(children[a]));
-	// 	}
-
-	// 	return out;
-	// }
-
-
-
 
 	// class Request
 
@@ -434,9 +357,12 @@ function initProbe(options, inputValues){
 
 	Probe.prototype.fillInputValues = async function(element){
 		element = element || document;
-		var ret = false;
-		var els = element.querySelectorAll("input, select, textarea");
-
+		var els, ret = false;
+		try{
+			els = element.querySelectorAll("input, select, textarea");
+		}catch(e){
+			return false;
+		}
 
 		for(var a = 0; a < els.length; a++){
 			if(await this.setVal(els[a]))
@@ -523,21 +449,15 @@ function initProbe(options, inputValues){
 		var events = [];
 		var map;
 
-		// if(this.options.triggerAllMappedEvents){
-		// 	map = this.eventsMap;
-		// 	for(var a = 0; a < map.length; a++){
-		// 		if(map[a].element == element){
-		// 			events = map[a].events.slice();
-		// 			break;
-		// 		}
-		// 	}
-		// }
-
 		map = this.options.eventsMap;
-		for(var selector in map){
-			if(element.webkitMatchesSelector(selector)){
-				events = events.concat(map[selector]);
+		try{
+			for(var selector in map){
+				if(element.webkitMatchesSelector(selector)){
+					events = events.concat(map[selector]);
+				}
 			}
+		}catch(e){
+			return events;
 		}
 		//if(events.length >0 ) return ['click']
 		return events;
@@ -646,30 +566,6 @@ function initProbe(options, inputValues){
 	}
 
 
-	// Probe.prototype.initializeElement = async function(element){
-	// 	var options = this.options;
-
-	// 	if(options.mapEvents){
-	// 		var els = element.getElementsByTagName("*");
-	// 		for(var a = 0; a < els.length; a++){
-	// 			for(var b = 0; b < options.allEvents.length; b++){
-	// 				var evname = "on" + options.allEvents[b];
-	// 				if(evname in els[a] && els[a][evname]){
-	// 					this.addEventToMap(els[a], options.allEvents[b]);
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-
-	// 	if(options.fillValues){
-	// 		await this.fillInputValues(element);
-	// 	}
-	// }
-
-
-
-
-
 
 	Probe.prototype.getFormAsRequest = function(form){
 
@@ -750,28 +646,6 @@ function initProbe(options, inputValues){
 
 
 
-	// Probe.prototype.startAnalysis = async function(){
-	// 	console.log("page initialized ");
-	// 	var _this = this;
-	// 	this.started_at = (new Date()).getTime();
-	// 	await this.crawlDOM(document);
-	// 	console.log("DOM analyzed ");
-	// };
-
-
-
-	// Probe.prototype.isContentDuplicated = function(cont){
-	// 	return this.domModifications.indexOf(cont) != -1;
-
-	// 	// for(let m of this.domModifications){
-	// 	// 	if(this.textComparator.compare(cont, m)){
-	// 	// 		return true;
-	// 	// 	}
-	// 	// }
-	// 	// return false;
-
-	// }
-
 	Probe.prototype.simhashDistance = function(s1, s2){
 		var x = (s1 ^ s2) & ((1 << 64) - 1);
 		var ans = 0;
@@ -781,8 +655,6 @@ function initProbe(options, inputValues){
 		}
 		return ans;
 	}
-
-
 
 
 

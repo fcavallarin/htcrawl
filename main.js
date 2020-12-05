@@ -652,7 +652,12 @@ Crawler.prototype.getElementText = async function(el){
 	if(el == this._page){
 		return null;
 	}
-	return await this._page.evaluate(el => el.innerText, el);
+	return await this._page.evaluate(el => {
+		if(el.tagName == "STYLE" || el.tagName == "SCRIPT"){
+			return null;
+		}
+		return el.innerText;
+	}, el);
 }
 
 
@@ -676,13 +681,12 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 	node = node || this._page;
 	layer = typeof layer != 'undefined' ? layer : 0;
 	if(layer == this.options.maximumRecursion){
-		console.log(">>>>RECURSON LIMIT REACHED :" + layer)
+		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
 		return;
 	}
 	//console.log(">>>>:" + layer)
 	var domArr = await this.getDOMTreeAsArray(node);
 
-	///this.setTrigger({});
 	this._trigger = {};
 	if(this.options.crawlmode == "random"){
 		this.randomizeArray(domArr);
@@ -705,7 +709,6 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 		//console.log("analyze element " + el);
 		let elsel = await this.getElementSelector(el);
 		if(! await this.isAttachedToDOM(el)){ // @TODO TEST ME
-			//console.log("!!00>>> " + this.stringifyElement(el) + " detached before analysis !!! results may be incomplete")
 			uRet = await this.dispatchProbeEvent("earlydetach", { node: elsel });
 			if(!uRet) continue;
 		}
@@ -714,12 +717,10 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 			if(this.options.triggerEvents){
 				uRet = await this.dispatchProbeEvent("triggerevent", {node: elsel, event: event});
 				if(!uRet) continue;
-
 				await this.triggerElementEvent(el, event);
 				await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
 			}
 
-			//console.log(this._pendingRequests)
 			//console.log("waiting requests to compete " + this._pendingRequests)
 			await this.waitForRequestsCompletion();
 			//console.log("waiting requests to compete.... DONE"  + this._pendingRequests)
@@ -728,28 +729,29 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 			newRoot = await this.popMutation();
 			while(newRoot.asElement()){
 				newEls.push(newRoot);
-				newRoot = await this.popMutation()
+				newRoot = await this.popMutation();
 			}
-			/*
+
 			for(var a = newEls.length - 1; a >= 0; a--){
 				var txt = await this.getElementText(newEls[a]);
-				//console.log(txt)
+				if(!txt || txt.length < 50){
+					continue;
+				}
 				// @TODO use textComparator
 				if(txt && this.domModifications.indexOf(txt) != -1){
-					//newEls.splice(a, 1);
+					newEls.splice(a, 1);
 				}
 			}
-			*/
+
 			if(newEls.length > 0){
-				/*
-				for(var a = 0; a < newEls.length; a++){
-					var txt = await this.getElementText(newEls[a]);
-					if(txt){
-						this.domModifications.push(txt);
-						//console.log(textComparator.getValue(newEls[a].innerText))
+				if(this.options.skipDuplicateContent){
+					for(var a = 0; a < newEls.length; a++){
+						var txt = await this.getElementText(newEls[a]);
+						if(txt){
+							this.domModifications.push(txt);
+						}
 					}
 				}
-				*/
 				//console.log("added elements " + newEls.length)
 				if(this.options.crawlmode == "random"){
 					this.randomizeArray(newEls);
