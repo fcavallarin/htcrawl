@@ -77,5 +77,6 @@ exports.options = {
 	bypassCSP: true,
 	simulateRealEvents: true,
 	crawlmode: "linear", // linear || random
-	browserLocalstorage: null
+	browserLocalstorage: null,
+	skipDuplicateContent: false
 };

@@ -14,7 +14,7 @@ version.
 const puppeteer = require('puppeteer');
 const defaults = require('./options').options;
 const probe = require("./probe");
-const probeTextComparator = require("./shingleprint");
+const textComparator = require("./shingleprint");
 
 const utils = require('./utils');
 const process = require('process');
@@ -52,8 +52,6 @@ exports.launch = async function(url, options){
 	await c.bootstrapPage(browser);
 	return c;
 };
-
-
 
 
 
@@ -111,6 +109,8 @@ function Crawler(targetUrl, options, browser){
 	this._trigger = {};
 	this._pendingRequests =[];
 	this._sentRequests = [];
+	this.documentElement = null;
+	this.domModifications = [];
 }
 
 
@@ -156,6 +156,7 @@ Crawler.prototype.errors = function(){
 // returns after all ajax&c have been completed
 Crawler.prototype.load = async function(){
 	const resp = await this._goto(this.targetUrl);
+	this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
 	return await this._afterNavigation(resp);
 };
 
@@ -198,7 +199,16 @@ Crawler.prototype._afterNavigation = async function(resp){
 		}
 
 		await _this._page.evaluate(async function(){
-			window.__PROBE__.takeDOMSnapshot();
+			//window.__PROBE__.takeDOMSnapshot();
+			let observer = new MutationObserver(mutations => {
+				for(let m of mutations){
+					if(m.type != 'childList' || m.addedNodes.length == 0)continue;
+					for(let e of m.addedNodes){
+						window.__PROBE__.DOMMutations.push(e)
+					}
+				}
+			});
+			observer.observe(document.documentElement, {childList: true, subtree: true});
 		});
 
 		_this._loaded = true;
@@ -217,27 +227,24 @@ Crawler.prototype._afterNavigation = async function(resp){
 Crawler.prototype.waitForRequestsCompletion = async function(){
 	await this._waitForRequestsCompletion();
 	await this._page.evaluate(async function(){ // use Promise.all ??
-		//await window.__PROBE__.waitAjax();
 		await window.__PROBE__.waitJsonp();
-		//await window.__PROBE__.waitFetch();
+		await window.__PROBE__.waitWebsocket();
 	});
 };
 
 Crawler.prototype.start = async function(){
-	var _this = this;
 
 	if(!this._loaded){
 		await this.load();
 	}
 
 	try {
-		await _this._page.evaluate(async function(){
-			//await window.__PROBE__.dispatchProbeEvent("start");
-			console.log("startAnalysis");
-			await window.__PROBE__.startAnalysis();
-		});
-
-		return _this;
+		// await _this._page.evaluate(async function(){
+		// 	console.log("startAnalysis");
+		// 	await window.__PROBE__.startAnalysis();
+		// });
+		await this.crawlDOM();
+		return this;
 	}catch(e){
 		_this._errors.push(["navigation","navigation aborted"]);
 		//_this.dispatchProbeEvent("end", {});
@@ -461,7 +468,7 @@ Crawler.prototype.bootstrapPage = async function(browser){
 	});
 
 	page.evaluateOnNewDocument(probe.initProbe, this.options, inputValues);
-	page.evaluateOnNewDocument(probeTextComparator.initTextComparator);
+	//page.evaluateOnNewDocument(probeTextComparator.initTextComparator);
 	page.evaluateOnNewDocument(utils.initJs, this.options);
 
 
@@ -577,3 +584,224 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 	_this._errors.push(["navigation","navigation aborted"]);
 	throw("Navigation error");
 };
+
+
+
+Crawler.prototype.popMutation = async function(){
+	return await this._page.evaluateHandle(() => window.__PROBE__.popMutation())
+}
+
+
+
+Crawler.prototype.getEventsForElement = async function(el){
+	const events = await this._page.evaluate( el => window.__PROBE__.getEventsForElement(el), el != this._page ? el : this.documentElement);
+	const l = await this.getElementEventListeners(el);
+	return events.concat(l.listeners.map(i => i.type));
+}
+
+
+/* DO NOT include node as first element.. this is a requirement */
+Crawler.prototype.getDOMTreeAsArray = async function(node){
+	var out = [];
+	try{
+		var children = await node.$$(":scope > *");
+	}catch(e){
+		return []
+		//console.log("Evaluation failed: TypeError: element.querySelectorAll is not a function")
+		//console.log(node)
+
+	}
+
+	if(children.length == 0){
+		return out;
+	}
+
+	for(var a = 0; a < children.length; a++){
+		out.push(children[a]);
+		out = out.concat(await this.getDOMTreeAsArray(children[a]));
+	}
+
+	return out;
+}
+
+
+
+
+
+Crawler.prototype.isAttachedToDOM = async function(node){
+	if(node == this._page){
+		return true;
+	}
+	var p = node;
+	while(p.asElement()) {
+		let n = await (await p.getProperty('nodeName')).jsonValue();
+		if(n.toLowerCase() == "html")
+			return true;
+		p = await p.getProperty('parentNode')//p.parentNode;
+	}
+	return false;
+};
+
+Crawler.prototype.triggerElementEvent = async function(el, event){
+	await this._page.evaluate((el, event) => {
+		window.__PROBE__.triggerElementEvent(el, event)
+	}, el != this._page ? el : this.documentElement, event)
+}
+
+Crawler.prototype.getElementText = async function(el){
+	if(el == this._page){
+		return null;
+	}
+	return await this._page.evaluate(el => {
+		if(el.tagName == "STYLE" || el.tagName == "SCRIPT"){
+			return null;
+		}
+		return el.innerText;
+	}, el);
+}
+
+
+Crawler.prototype.fillInputValues = async function(el){
+	await this._page.evaluate(el => {
+		window.__PROBE__.fillInputValues(el);
+	}, el != this._page ? el : this.documentElement)
+}
+
+
+
+Crawler.prototype.getElementSelector = async function(el){
+	await this._page.evaluate(el => {
+		window.__PROBE__.getElementSelector(el);
+	}, el != this._page ? el : this.documentElement)
+}
+
+
+Crawler.prototype.crawlDOM = async function(node, layer){
+	if(this._stop) return;
+	node = node || this._page;
+	layer = typeof layer != 'undefined' ? layer : 0;
+	if(layer == this.options.maximumRecursion){
+		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
+		return;
+	}
+	//console.log(">>>>:" + layer)
+	var domArr = await this.getDOMTreeAsArray(node);
+
+	this._trigger = {};
+	if(this.options.crawlmode == "random"){
+		this.randomizeArray(domArr);
+	}
+
+	var dom = [node].concat(domArr);
+	var	newEls;
+	var newRoot;
+	var uRet;
+
+	await this.fillInputValues(node);
+
+	if(layer == 0){
+		await this.dispatchProbeEvent("start");
+	}
+
+	//let analyzed = 0;
+	for(let el of dom){
+		if(this._stop) return;
+		//console.log("analyze element " + el);
+		let elsel = await this.getElementSelector(el);
+		if(! await this.isAttachedToDOM(el)){ // @TODO TEST ME
+			uRet = await this.dispatchProbeEvent("earlydetach", { node: elsel });
+			if(!uRet) continue;
+		}
+		for(let event of await this.getEventsForElement(el)){
+			if(this._stop) return;
+			if(this.options.triggerEvents){
+				uRet = await this.dispatchProbeEvent("triggerevent", {node: elsel, event: event});
+				if(!uRet) continue;
+				await this.triggerElementEvent(el, event);
+				await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
+			}
+
+			//console.log("waiting requests to compete " + this._pendingRequests)
+			await this.waitForRequestsCompletion();
+			//console.log("waiting requests to compete.... DONE"  + this._pendingRequests)
+
+			newEls = [];
+			newRoot = await this.popMutation();
+			while(newRoot.asElement()){
+				newEls.push(newRoot);
+				newRoot = await this.popMutation();
+			}
+
+			for(var a = newEls.length - 1; a >= 0; a--){
+				var txt = await this.getElementText(newEls[a]);
+				if(!txt || txt.length < 50){
+					continue;
+				}
+				// @TODO use textComparator
+				if(txt && this.domModifications.indexOf(txt) != -1){
+					newEls.splice(a, 1);
+				}
+			}
+
+			if(newEls.length > 0){
+				if(this.options.skipDuplicateContent){
+					for(var a = 0; a < newEls.length; a++){
+						var txt = await this.getElementText(newEls[a]);
+						if(txt){
+							this.domModifications.push(txt);
+						}
+					}
+				}
+				//console.log("added elements " + newEls.length)
+				if(this.options.crawlmode == "random"){
+					this.randomizeArray(newEls);
+				}
+				for(let ne of newEls){
+					uRet = await this.dispatchProbeEvent("newdom", {
+						rootNode: await this.getElementSelector(ne),
+						trigger: this._trigger,
+						layer: layer
+					});
+					if(uRet)
+						await this.crawlDOM(ne, layer + 1);
+				}
+
+			}
+		}
+
+	}
+}
+
+Crawler.prototype.getElementRemoteId = async function(el){
+	if(el == this._page){
+		el = this.documentElement;
+	}
+	const node = await this._page._client.send("DOM.describeNode", {
+		objectId: el._remoteObject.objectId
+	});
+	return node.node.backendNodeId;
+}
+
+
+Crawler.prototype.getElementEventListeners = async function(el){
+	if(el == this._page){
+		el = this.documentElement;
+	}
+	//try{
+	const node = await this._page._client.send("DOMDebugger.getEventListeners", {
+		objectId: el._remoteObject.objectId
+	});
+	//}catch(e){console.log(el)}
+
+	return node;
+}
+
+
+Crawler.prototype.randomizeArray = function(arr) {
+	var a, ri;
+	for (a = arr.length - 1; a > 0; a--) {
+		ri = Math.floor(Math.random() * (a + 1));
+		[arr[a], arr[ri]] = [arr[ri], arr[a]];
+	}
+};
+
