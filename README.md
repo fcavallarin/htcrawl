@@ -3,7 +3,7 @@
 Htcrawl is nodejs module for the recursive crawling of single page applications (SPA) using javascript.  
 It uses headless chrome to load and analyze web applications and it's build on top of Puppetteer from wich it inherits all the functionalities.
 
-With htcrawl you can roll your own DOM-XSS scanner with less than 60 lines of javascript!!
+With htcrawl you can roll your own DOM-XSS scanner with less than 60 lines of javascript (see [domdig](https://github.com/fcavallarin/domdig))!!
 
 More infos at [htcrawl.org](http://htcrawl.org).
 
