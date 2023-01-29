@@ -49,7 +49,7 @@ exports.launch = async function(url, options){
 
 	var browser = await puppeteer.launch({headless: options.headlessChrome, ignoreHTTPSErrors: true, args:chromeArgs});
 	var c = new Crawler(url, options, browser);
-	await c.bootstrapPage(browser);
+	await c.bootstrapPage();
 	return c;
 };
 
@@ -156,7 +156,7 @@ Crawler.prototype.errors = function(){
 // returns after all ajax&c have been completed
 Crawler.prototype.load = async function(){
 	const resp = await this._goto(this.targetUrl);
-	this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
+	// this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
 	return await this._afterNavigation(resp);
 };
 
@@ -165,7 +165,9 @@ Crawler.prototype._goto = async function(url){
 	if(this.options.verbose)console.log("LOAD")
 
 	try{
-		return await this._page.goto(url, {waitUntil:'load'});
+		const ret = await this._page.goto(url, {waitUntil:'load'});
+		this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
+		return ret;
 	}catch(e){
 		_this._errors.push(["navigation","navigation aborted"]);
 		throw e;
@@ -246,7 +248,7 @@ Crawler.prototype.start = async function(){
 		await this.crawlDOM();
 		return this;
 	}catch(e){
-		_this._errors.push(["navigation","navigation aborted"]);
+		this._errors.push(["navigation","navigation aborted"]);
 		//_this.dispatchProbeEvent("end", {});
 		throw e;
 	}
@@ -305,7 +307,7 @@ Crawler.prototype.dispatchProbeEvent = async function(name, params) {
 
 Crawler.prototype.handleRequest = async function(req){
 	let extrah = req.headers();
-	let type = req._resourceType; // xhr || fetch
+	let type = req.resourceType(); // xhr || fetch
 	delete extrah['referer'];
 	delete extrah['user-agent'];
 	let r = new utils.Request(type, req.method(), req.url().split("#")[0], req.postData(), this._trigger, extrah);
@@ -352,7 +354,7 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 	});
 }
 
-Crawler.prototype.bootstrapPage = async function(browser){
+Crawler.prototype.bootstrapPage = async function(){
 	var options = this.options,
 		targetUrl = this.targetUrl,
 		pageCookies = this.pageCookies;
@@ -367,7 +369,7 @@ Crawler.prototype.bootstrapPage = async function(browser){
 	// this process will lead to and infinite loop!
 	var inputValues = utils.generateRandomValues(this.options.randomSeed);
 
-	const page = await browser.newPage();
+	const page = await this._browser.newPage();
 	crawler._page = page;
 	//if(options.verbose)console.log("new page")
 	await page.setRequestInterception(true);
@@ -439,7 +441,7 @@ Crawler.prototype.bootstrapPage = async function(browser){
 			crawler._firstRun = false;
 		}
 
-		if(req._resourceType == 'xhr' || req._resourceType == 'fetch'){
+		if(req.resourceType() == 'xhr' || req.resourceType() == 'fetch'){
 			return await this.handleRequest(req);
 		}
 		req.continue(overrides);
@@ -450,7 +452,7 @@ Crawler.prototype.bootstrapPage = async function(browser){
 		dialog.accept();
 	});
 
-	browser.on("targetcreated", async (target)=>{
+	this._browser.on("targetcreated", async (target)=>{
 		const p = await target.page();
 		if(p) p.close();
 	});
@@ -776,8 +778,8 @@ Crawler.prototype.getElementRemoteId = async function(el){
 	if(el == this._page){
 		el = this.documentElement;
 	}
-	const node = await this._page._client.send("DOM.describeNode", {
-		objectId: el._remoteObject.objectId
+	const node = await this._page._client().send("DOM.describeNode", {
+		objectId: el.remoteObject().objectId
 	});
 	return node.node.backendNodeId;
 }
@@ -788,8 +790,8 @@ Crawler.prototype.getElementEventListeners = async function(el){
 		el = this.documentElement;
 	}
 	//try{
-	const node = await this._page._client.send("DOMDebugger.getEventListeners", {
-		objectId: el._remoteObject.objectId
+	const node = await this._page._client().send("DOMDebugger.getEventListeners", {
+		objectId: el.remoteObject().objectId
 	});
 	//}catch(e){console.log(el)}
 

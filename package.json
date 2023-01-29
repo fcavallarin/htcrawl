@@ -1,13 +1,13 @@
 {
   "name": "htcrawl",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "crawler for single page applications",
   "main": "main.js",
   "dependencies": {
-    "puppeteer": "^1.19.0"
+    "puppeteer": "^19.4.2"
   },
   "devDependencies": {
-    "puppeteer": "^1.19.0"
+    "puppeteer": "^19.4.2"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
