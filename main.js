@@ -143,6 +143,7 @@ function Crawler(targetUrl, options, browser){
 	this._sentRequests = [];
 	this.documentElement = null;
 	this.domModifications = [];
+	this._stop = false;
 }
 
 Crawler.prototype._setTargetUrl = function(url){
@@ -279,11 +280,8 @@ Crawler.prototype.start = async function(){
 	}
 
 	try {
-		// await _this._page.evaluate(async function(){
-		// 	console.log("startAnalysis");
-		// 	await window.__PROBE__.startAnalysis();
-		// });
-		await this.crawlDOM();
+		this._stop = false;
+		await this._crawlDOM();
 		return this;
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
@@ -296,17 +294,14 @@ Crawler.prototype.start = async function(){
 
 
 Crawler.prototype.stop = function(){
-	var _this = this;
-	this._page.evaluate( () => {
-		window.__PROBE__._stop = true;
-	})
+	this._stop = true;
 }
 
 
 Crawler.prototype.on = function(eventName, handler){
 	eventName = eventName.toLowerCase();
 	if(!(eventName in this.probeEvents)){
-		throw("unknown event name");
+		throw("unknown event name: " + eventName);
 	}
 	this.probeEvents[eventName] = handler;
 };
@@ -394,7 +389,6 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 
 Crawler.prototype.bootstrapPage = async function(){
 	var options = this.options,
-		// targetUrl = this.targetUrl,
 		pageCookies = this.pageCookies;
 
 	var crawler = this;
@@ -555,22 +549,20 @@ Crawler.prototype.newPage = async function(url){
 	if(url){
 		this._setTargetUrl(url);
 	}
+	this._firstRun = true;
 	await this.bootstrapPage();
 }
 
-Crawler.prototype.navigate = async function(url){
+Crawler.prototype.navigate = async function(url){  // @TODO test me ( see _firstRun)
 	if(!this._loaded){
 		throw("Crawler must be loaded before navigate");
 	}
 	var resp = null;
-	this._allowNavigation = true;
 	try{
 		resp = await this._goto(url);
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
 		throw("Navigation error");
-	}finally{
-		this._allowNavigation = false;
 	}
 
 	await this._afterNavigation(resp);
@@ -726,7 +718,7 @@ Crawler.prototype.getElementSelector = async function(el){
 }
 
 
-Crawler.prototype.crawlDOM = async function(node, layer){
+Crawler.prototype._crawlDOM = async function(node, layer){
 	if(this._stop) return;
 
 	node = node || this._page;
@@ -735,7 +727,7 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
 		return;
 	}
-	//console.log(">>>>:" + layer)
+	// console.log(">>>>:" + layer)
 	var domArr = await this.getDOMTreeAsArray(node);
 
 	this._trigger = {};
@@ -803,18 +795,19 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 						}
 					}
 				}
-				//console.log("added elements " + newEls.length)
+				// console.log("added elements " + newEls.length)
 				if(this.options.crawlmode == "random"){
 					this.randomizeArray(newEls);
 				}
 				for(let ne of newEls){
+					if(this._stop) return;
 					uRet = await this.dispatchProbeEvent("newdom", {
 						rootNode: await this.getElementSelector(ne),
 						trigger: this._trigger,
 						layer: layer
 					});
 					if(uRet)
-						await this.crawlDOM(ne, layer + 1);
+						await this._crawlDOM(ne, layer + 1);
 				}
 
 			}

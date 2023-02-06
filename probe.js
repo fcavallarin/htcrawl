@@ -45,7 +45,6 @@ function initProbe(options, inputValues){
 		this._pendingJsonp = [];
 		//this._pendingFetch = [];
 		this._pendingWebsocket = [];
-		this._stop = false;
 		this.inputValues = inputValues;
 		this.currentUserScriptParameters = [];
 		this.domModifications = [];
@@ -356,17 +355,23 @@ function initProbe(options, inputValues){
 	};
 
 	Probe.prototype.fillInputValues = async function(element){
+		const inputs = ["input", "select", "textarea"]
 		element = element || document;
 		var els, ret = false;
 		try{
-			els = element.querySelectorAll("input, select, textarea");
+			els = element.querySelectorAll(inputs.join(","));
 		}catch(e){
 			return false;
 		}
-
-		for(var a = 0; a < els.length; a++){
-			if(await this.setVal(els[a]))
+		if(inputs.indexOf(element.nodeName.toLowerCase()) > -1){
+			if(await this.setVal(element)){
 				ret = true;
+			}
+		}
+		for(var a = 0; a < els.length; a++){
+			if(await this.setVal(els[a])){
+				ret = true;
+			}
 		}
 		return ret;
 	};
@@ -402,6 +407,19 @@ function initProbe(options, inputValues){
 				e.preventDefault();
 			}
 			*/
+
+			// Allow navigation only if it points to the current page and the hash has changed
+			if(el.matches("a")){
+				const newUrl = new URL(el.href);
+				const curUrl = new URL(document.location.href);
+				if(newUrl.hash && newUrl.hash != curUrl.hash){
+					newUrl.hash = "";
+					curUrl.hash = "";
+					if(newUrl.toString() == curUrl.toString()){
+						return;
+					}
+				}
+			}
 			e.preventDefault();
 			e.stopPropagation();
 			e.stopImmediatePropagation();
@@ -856,12 +874,11 @@ function initProbe(options, inputValues){
 	}
 
 
-	Probe.prototype.sleep = function(n){
-		var _this = this;
-		return new Promise(resolve => {
-			_this.setTimeout(resolve, n);
-		});
-	};
+	// Probe.prototype.sleep = function(n){
+	// 	return new Promise(resolve => {
+	// 		this.setTimeout(resolve, n);
+	// 	});
+	// };
 
 
 
