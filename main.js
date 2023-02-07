@@ -1,7 +1,7 @@
 /*
-htcrawl - 1.1
+HTCRAWL - 1.0
 http://htcrawl.org
-Author: filippo.cavallarin@wearesegment.com
+Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -281,6 +281,7 @@ Crawler.prototype.start = async function(){
 
 	try {
 		this._stop = false;
+		await this.fillInputValues(this._page);
 		await this._crawlDOM();
 		return this;
 	}catch(e){
@@ -740,7 +741,7 @@ Crawler.prototype._crawlDOM = async function(node, layer){
 	var newRoot;
 	var uRet;
 
-	await this.fillInputValues(node);
+	// await this.fillInputValues(node);
 
 	if(layer == 0){
 		await this.dispatchProbeEvent("start");
@@ -798,6 +799,10 @@ Crawler.prototype._crawlDOM = async function(node, layer){
 				// console.log("added elements " + newEls.length)
 				if(this.options.crawlmode == "random"){
 					this.randomizeArray(newEls);
+				}
+				for(let ne of newEls){
+					if(this._stop) return;
+					await this.fillInputValues(ne);
 				}
 				for(let ne of newEls){
 					if(this._stop) return;

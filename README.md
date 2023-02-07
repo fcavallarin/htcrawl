@@ -37,4 +37,4 @@ This program is free software; you can redistribute it and/or modify it under th
 
 ## ABOUT
 
-Written by Filippo Cavallarin. This project is son of Htcap (https://github.com/fcavallarin/htcap | https://htcap.org).
+Written by Filippo Cavallarin. This project is son of Htcap (https://github.com/fcavallarin/htcap).
