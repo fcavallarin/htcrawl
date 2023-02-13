@@ -1,7 +1,7 @@
 /*
-htcrawl - 1.1
+HTCRAWL - 1.0
 http://htcrawl.org
-Author: filippo.cavallarin@wearesegment.com
+Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -48,9 +48,40 @@ exports.launch = async function(url, options){
 	}
 
 	var browser = await puppeteer.launch({headless: options.headlessChrome, ignoreHTTPSErrors: true, args:chromeArgs});
-	var c = new Crawler(url, options, browser);
-	await c.bootstrapPage();
-	return c;
+	var crawler = new Crawler(url, options, browser);
+	await crawler.bootstrapPage();
+	setTimeout(async function reqloop(){
+		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
+			let r = crawler._pendingRequests[i];
+			let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
+			if(r.p.response()){
+				let rtxt = null;
+				try{
+					rtxt = await r.p.response().text();
+				} catch(e){}
+				await crawler.dispatchProbeEvent(events[r.h.type], {
+					request: r.h,
+					response: rtxt
+				});
+				crawler._pendingRequests.splice(i, 1);
+			}
+			if(r.p.failure()){
+				//console.log("*** FAILUREResponse for " + r.p.url())
+				crawler._pendingRequests.splice(i, 1);
+			}
+		}
+		setTimeout(reqloop, 50);
+	}, 50);
+
+	browser.on("targetcreated", async (target)=>{
+		if(crawler._allowNewWindows){
+			return;
+		}
+		const p = await target.page();
+		if(p) p.close();
+	});
+
+	return crawler;
 };
 
 
@@ -58,11 +89,11 @@ exports.launch = async function(url, options){
 
 function Crawler(targetUrl, options, browser){
 
-	targetUrl = targetUrl.trim();
-	if(targetUrl.length < 4 || targetUrl.substring(0,4).toLowerCase() != "http"){
-		targetUrl = "http://" + targetUrl;
-	}
-	this.targetUrl = targetUrl;
+	// targetUrl = targetUrl.trim();
+	// if(targetUrl.length < 4 || targetUrl.substring(0,4).toLowerCase() != "http"){
+	// 	targetUrl = "http://" + targetUrl;
+	// }
+	this._setTargetUrl(targetUrl);
 
 	this.publicProbeMethods = [''];
 	this._cookies = [];
@@ -70,6 +101,7 @@ function Crawler(targetUrl, options, browser){
 	this._errors = [];
 	this._loaded = false;
 	this._allowNavigation = false;
+	this._allowNewWindows = false;
 	this._firstRun = true;
 	this.error_codes = ["contentType","navigation","response"];
 
@@ -111,8 +143,16 @@ function Crawler(targetUrl, options, browser){
 	this._sentRequests = [];
 	this.documentElement = null;
 	this.domModifications = [];
+	this._stop = false;
 }
 
+Crawler.prototype._setTargetUrl = function(url){
+	url = url.trim();
+	if(url.length < 4 || url.substring(0,4).toLowerCase() != "http"){
+		url = "http://" + url;
+	}
+	this.targetUrl = url;
+}
 
 Crawler.prototype.browser = function(){
 	return this._browser;
@@ -156,23 +196,22 @@ Crawler.prototype.errors = function(){
 // returns after all ajax&c have been completed
 Crawler.prototype.load = async function(){
 	const resp = await this._goto(this.targetUrl);
-	// this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
 	return await this._afterNavigation(resp);
 };
 
 Crawler.prototype._goto = async function(url){
-	var _this = this;
 	if(this.options.verbose)console.log("LOAD")
-
+	var ret = null;
+	this._allowNavigation = true;
 	try{
-		const ret = await this._page.goto(url, {waitUntil:'load'});
-		this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
-		return ret;
+		ret = await this._page.goto(url, {waitUntil:'load'});
 	}catch(e){
-		_this._errors.push(["navigation","navigation aborted"]);
+		this._errors.push(["navigation","navigation aborted"]);
 		throw e;
-	};
-
+	}finally{
+		this._allowNavigation = false;
+	}
+	return ret;
 }
 Crawler.prototype._afterNavigation = async function(resp){
 	var _this = this;
@@ -199,9 +238,9 @@ Crawler.prototype._afterNavigation = async function(resp){
 		if(!assertContentType(hdrs)){
 			throw "Content type is not text/html";
 		}
-
+		_this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
 		await _this._page.evaluate(async function(){
-			//window.__PROBE__.takeDOMSnapshot();
+			window.__PROBE__.DOMMutations = [];
 			let observer = new MutationObserver(mutations => {
 				for(let m of mutations){
 					if(m.type != 'childList' || m.addedNodes.length == 0)continue;
@@ -241,11 +280,9 @@ Crawler.prototype.start = async function(){
 	}
 
 	try {
-		// await _this._page.evaluate(async function(){
-		// 	console.log("startAnalysis");
-		// 	await window.__PROBE__.startAnalysis();
-		// });
-		await this.crawlDOM();
+		this._stop = false;
+		await this.fillInputValues(this._page);
+		await this._crawlDOM();
 		return this;
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
@@ -258,17 +295,14 @@ Crawler.prototype.start = async function(){
 
 
 Crawler.prototype.stop = function(){
-	var _this = this;
-	this._page.evaluate( () => {
-		window.__PROBE__._stop = true;
-	})
+	this._stop = true;
 }
 
 
 Crawler.prototype.on = function(eventName, handler){
 	eventName = eventName.toLowerCase();
 	if(!(eventName in this.probeEvents)){
-		throw("unknown event name");
+		throw("unknown event name: " + eventName);
 	}
 	this.probeEvents[eventName] = handler;
 };
@@ -356,7 +390,6 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 
 Crawler.prototype.bootstrapPage = async function(){
 	var options = this.options,
-		targetUrl = this.targetUrl,
 		pageCookies = this.pageCookies;
 
 	var crawler = this;
@@ -369,7 +402,10 @@ Crawler.prototype.bootstrapPage = async function(){
 	// this process will lead to and infinite loop!
 	var inputValues = utils.generateRandomValues(this.options.randomSeed);
 
+	this._allowNewWindows = true;
 	const page = await this._browser.newPage();
+	this._allowNewWindows = false;
+
 	crawler._page = page;
 	//if(options.verbose)console.log("new page")
 	await page.setRequestInterception(true);
@@ -377,29 +413,28 @@ Crawler.prototype.bootstrapPage = async function(){
 		await page.setBypassCSP(true);
 	}
 
-
-	setTimeout(async function reqloop(){
-		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
-			let r = crawler._pendingRequests[i];
-			let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
-			if(r.p.response()){
-				let rtxt = null;
-				try{
-					rtxt = await r.p.response().text();
-				} catch(e){}
-				await crawler.dispatchProbeEvent(events[r.h.type], {
-					request: r.h,
-					response: rtxt
-				});
-				crawler._pendingRequests.splice(i, 1);
-			}
-			if(r.p.failure()){
-				//console.log("*** FAILUREResponse for " + r.p.url())
-				crawler._pendingRequests.splice(i, 1);
-			}
-		}
-		setTimeout(reqloop, 50);
-	}, 50);
+	// setTimeout(async function reqloop(){
+	// 	for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
+	// 		let r = crawler._pendingRequests[i];
+	// 		let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
+	// 		if(r.p.response()){
+	// 			let rtxt = null;
+	// 			try{
+	// 				rtxt = await r.p.response().text();
+	// 			} catch(e){}
+	// 			await crawler.dispatchProbeEvent(events[r.h.type], {
+	// 				request: r.h,
+	// 				response: rtxt
+	// 			});
+	// 			crawler._pendingRequests.splice(i, 1);
+	// 		}
+	// 		if(r.p.failure()){
+	// 			//console.log("*** FAILUREResponse for " + r.p.url())
+	// 			crawler._pendingRequests.splice(i, 1);
+	// 		}
+	// 	}
+	// 	setTimeout(reqloop, 50);
+	// }, 50);
 
 	page.on('request', async req => {
 		const overrides = {};
@@ -452,10 +487,10 @@ Crawler.prototype.bootstrapPage = async function(){
 		dialog.accept();
 	});
 
-	this._browser.on("targetcreated", async (target)=>{
-		const p = await target.page();
-		if(p) p.close();
-	});
+	// this._browser.on("targetcreated", async (target)=>{
+	// 	const p = await target.page();
+	// 	if(p) p.close();
+	// });
 
 
 	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
@@ -511,20 +546,24 @@ Crawler.prototype.bootstrapPage = async function(){
 
 };
 
+Crawler.prototype.newPage = async function(url){
+	if(url){
+		this._setTargetUrl(url);
+	}
+	this._firstRun = true;
+	await this.bootstrapPage();
+}
 
-Crawler.prototype.navigate = async function(url){
+Crawler.prototype.navigate = async function(url){  // @TODO test me ( see _firstRun)
 	if(!this._loaded){
 		throw("Crawler must be loaded before navigate");
 	}
 	var resp = null;
-	this._allowNavigation = true;
 	try{
 		resp = await this._goto(url);
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
 		throw("Navigation error");
-	}finally{
-		this._allowNavigation = false;
 	}
 
 	await this._afterNavigation(resp);
@@ -567,11 +606,13 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 	if(typeof timeout == 'undefined') timeout = 500;
 
 	this._allowNavigation = true;
+	// await this._page.evaluate(() => window.__PROBE__.DOMMutations=[]);
+
 	try{
 		pa = await Promise.all([
 			element.click(),
 			this._page.waitForRequest(req => req.isNavigationRequest() && req.frame() == _this._page.mainFrame(), {timeout:timeout}),
-			this._page.waitForNavigation({waitUntil:'load'}),
+			this._page.waitForNavigation({waitUntil:'load'})
 		]);
 
 	} catch(e){
@@ -678,15 +719,16 @@ Crawler.prototype.getElementSelector = async function(el){
 }
 
 
-Crawler.prototype.crawlDOM = async function(node, layer){
+Crawler.prototype._crawlDOM = async function(node, layer){
 	if(this._stop) return;
+
 	node = node || this._page;
 	layer = typeof layer != 'undefined' ? layer : 0;
 	if(layer == this.options.maximumRecursion){
 		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
 		return;
 	}
-	//console.log(">>>>:" + layer)
+	// console.log(">>>>:" + layer)
 	var domArr = await this.getDOMTreeAsArray(node);
 
 	this._trigger = {};
@@ -699,7 +741,7 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 	var newRoot;
 	var uRet;
 
-	await this.fillInputValues(node);
+	// await this.fillInputValues(node);
 
 	if(layer == 0){
 		await this.dispatchProbeEvent("start");
@@ -754,18 +796,23 @@ Crawler.prototype.crawlDOM = async function(node, layer){
 						}
 					}
 				}
-				//console.log("added elements " + newEls.length)
+				// console.log("added elements " + newEls.length)
 				if(this.options.crawlmode == "random"){
 					this.randomizeArray(newEls);
 				}
 				for(let ne of newEls){
+					if(this._stop) return;
+					await this.fillInputValues(ne);
+				}
+				for(let ne of newEls){
+					if(this._stop) return;
 					uRet = await this.dispatchProbeEvent("newdom", {
 						rootNode: await this.getElementSelector(ne),
 						trigger: this._trigger,
 						layer: layer
 					});
 					if(uRet)
-						await this.crawlDOM(ne, layer + 1);
+						await this._crawlDOM(ne, layer + 1);
 				}
 
 			}

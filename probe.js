@@ -1,7 +1,7 @@
 /*
 HTCRAWL - 1.0
 http://htcrawl.org
-Author: filippo.cavallarin@wearesegment.com
+Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -45,7 +45,6 @@ function initProbe(options, inputValues){
 		this._pendingJsonp = [];
 		//this._pendingFetch = [];
 		this._pendingWebsocket = [];
-		this._stop = false;
 		this.inputValues = inputValues;
 		this.currentUserScriptParameters = [];
 		this.domModifications = [];
@@ -356,19 +355,26 @@ function initProbe(options, inputValues){
 	};
 
 	Probe.prototype.fillInputValues = async function(element){
+		const inputs = ["input", "select", "textarea"]
 		element = element || document;
-		var els, ret = false;
+		var els;
+		// var ret = false;
 		try{
-			els = element.querySelectorAll("input, select, textarea");
+			els = element.querySelectorAll(inputs.join(","));
 		}catch(e){
 			return false;
 		}
-
-		for(var a = 0; a < els.length; a++){
-			if(await this.setVal(els[a]))
-				ret = true;
+		if(inputs.indexOf(element.nodeName.toLowerCase()) > -1){
+			await this.setVal(element);
+			// update angularjs model
+			this.trigger(element, 'input');
 		}
-		return ret;
+		for(var a = 0; a < els.length; a++){
+			await this.setVal(els[a]);
+			// update angularjs model
+			this.trigger(els[a], 'input');
+		}
+		// return ret;
 	};
 
 
@@ -402,6 +408,26 @@ function initProbe(options, inputValues){
 				e.preventDefault();
 			}
 			*/
+
+			// Allow navigation only if it points to the current page and the hash has changed
+			if(el.matches("a")){
+				var newUrl;
+				try{
+					newUrl = new URL(el.href);
+				}catch(e){
+					newUrl = null; // malformed URL, block navigation
+				}
+				if(newUrl){
+					const curUrl = new URL(document.location.href);
+					if(newUrl.hash && newUrl.hash != curUrl.hash){
+						newUrl.hash = "";
+						curUrl.hash = "";
+						if(newUrl.toString() == curUrl.toString()){
+							return;
+						}
+					}
+				}
+			}
 			e.preventDefault();
 			e.stopPropagation();
 			e.stopImmediatePropagation();
@@ -856,12 +882,11 @@ function initProbe(options, inputValues){
 	}
 
 
-	Probe.prototype.sleep = function(n){
-		var _this = this;
-		return new Promise(resolve => {
-			_this.setTimeout(resolve, n);
-		});
-	};
+	// Probe.prototype.sleep = function(n){
+	// 	return new Promise(resolve => {
+	// 		this.setTimeout(resolve, n);
+	// 	});
+	// };
 
 
 
