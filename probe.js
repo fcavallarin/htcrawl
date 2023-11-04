@@ -47,7 +47,7 @@ function initProbe(options, inputValues){
 		this._pendingWebsocket = [];
 		this.inputValues = inputValues;
 		this.currentUserScriptParameters = [];
-		this.domModifications = [];
+		// this.domModifications = [];
 
 		this._lastRequestId = 0;
 		this.started_at = null;
@@ -57,11 +57,9 @@ function initProbe(options, inputValues){
 		this.setTimeout = window.setTimeout.bind(window);
 		this.setInterval = window.setInterval.bind(window);
 
-
-
 		this.DOMMutations = [];
 		this.DOMMutationsToPop = [];
-
+		this.totalDOMMutations = 0;
 	};
 
 
@@ -672,15 +670,15 @@ function initProbe(options, inputValues){
 
 
 
-	Probe.prototype.simhashDistance = function(s1, s2){
-		var x = (s1 ^ s2) & ((1 << 64) - 1);
-		var ans = 0;
-		while(x){
-			ans += 1;
-			x &= x - 1;
-		}
-		return ans;
-	}
+	// Probe.prototype.simhashDistance = function(s1, s2){
+	// 	var x = (s1 ^ s2) & ((1 << 64) - 1);
+	// 	var ans = 0;
+	// 	while(x){
+	// 		ans += 1;
+	// 		x &= x - 1;
+	// 	}
+	// 	return ans;
+	// }
 
 
 
@@ -887,8 +885,6 @@ function initProbe(options, inputValues){
 	// 		this.setTimeout(resolve, n);
 	// 	});
 	// };
-
-
 
 	window.__PROBE__ = new Probe(options, inputValues);
 };

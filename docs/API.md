@@ -53,6 +53,7 @@ htcap.launch(targetUrl, options).then(crawler => {
   - `exceptionOnRedirect` &lt;boolean&gt; Whether to throw an exception on redirect. Defaults to false.
   - `navigationTimeout` &lt;number&gt; Sets the navigation timeout. Defaults to 10000.
   - `bypassCSP` &lt;boolean&gt; Whether to bypass CSP settings. Defaults to true.
+  - `skipDuplicateContent`  &lt;boolean&gt; Use heuristic content deduplication. Defaults to true.
 
 
 ## crawler.load()

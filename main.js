@@ -14,7 +14,7 @@ version.
 const puppeteer = require('puppeteer');
 const defaults = require('./options').options;
 const probe = require("./probe");
-const textComparator = require("./shingleprint");
+const DOMDeduplicator= require("./domdeduplicator").DOMDeduplicator;
 
 const utils = require('./utils');
 const process = require('process');
@@ -142,8 +142,9 @@ function Crawler(targetUrl, options, browser){
 	this._pendingRequests =[];
 	this._sentRequests = [];
 	this.documentElement = null;
-	this.domModifications = [];
+	// this.domModifications = [];
 	this._stop = false;
+	this.domDeduplicator = new DOMDeduplicator();
 }
 
 Crawler.prototype._setTargetUrl = function(url){
@@ -214,51 +215,52 @@ Crawler.prototype._goto = async function(url){
 	return ret;
 }
 Crawler.prototype._afterNavigation = async function(resp){
-	var _this = this;
 	var assertContentType = function(hdrs){
 		let ctype = 'content-type' in hdrs ? hdrs['content-type'] : "";
 
 		if(ctype.toLowerCase().split(";")[0] != "text/html"){
-			_this._errors.push(["content_type", `content type is ${ctype}`]);
+			this._errors.push(["content_type", `content type is ${ctype}`]);
 			return false;
 		}
 		return true;
 	}
 	try{
 		if(!resp.ok()){
-			_this._errors.push(["response", resp.request().url() + " status: " + resp.status()]);
+			this._errors.push(["response", resp.request().url() + " status: " + resp.status()]);
 			throw resp.status();
-			//_this.dispatchProbeEvent("end", {});
+			//this.dispatchProbeEvent("end", {});
 			//return;
 		}
 		var hdrs = resp.headers();
-		_this._cookies = utils.parseCookiesFromHeaders(hdrs, resp.url())
+		this._cookies = utils.parseCookiesFromHeaders(hdrs, resp.url())
 
 
 		if(!assertContentType(hdrs)){
 			throw "Content type is not text/html";
 		}
-		_this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
-		await _this._page.evaluate(async function(){
-			window.__PROBE__.DOMMutations = [];
+		this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
+		await this._page.evaluate(async function(){
+			window.__PROBE__.DOMMutations = [];  // <--- @TODO .. why here??
 			let observer = new MutationObserver(mutations => {
 				for(let m of mutations){
 					if(m.type != 'childList' || m.addedNodes.length == 0)continue;
 					for(let e of m.addedNodes){
-						window.__PROBE__.DOMMutations.push(e)
+						window.__PROBE__.totalDOMMutations++;
+						window.__PROBE__.DOMMutations.push(e);
 					}
 				}
 			});
 			observer.observe(document.documentElement, {childList: true, subtree: true});
 		});
+		this.domDeduplicator.reset();
+	
+		// @TODO reset also probe ?(!!) like this.DOMMutations = [] and this.DOMMutationsToPop = [] ...
+		this._loaded = true;
 
-		_this._loaded = true;
-
-		await _this.dispatchProbeEvent("domcontentloaded", {});
-		await _this.waitForRequestsCompletion();
-		await _this.dispatchProbeEvent("pageinitialized", {});
-
-		return _this;
+		await this.dispatchProbeEvent("domcontentloaded", {});
+		await this.waitForRequestsCompletion();
+		await this.dispatchProbeEvent("pageinitialized", {});
+		return this;
 	}catch(e){
 		//;
 		throw e;
@@ -371,7 +373,7 @@ Crawler.prototype.handleRequest = async function(req){
 
 Crawler.prototype._waitForRequestsCompletion = function(){
 	var requests = this._pendingRequests;
-	var reqPerformed = false;
+	// var reqPerformed = false;
 	return new Promise( (resolve, reject) => {
 		var timeout = 1000 ;//_this.options.ajaxTimeout;
 
@@ -379,11 +381,12 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 			if(timeout <= 0 || requests.length == 0){
 				clearInterval(t);
 				//console.log("waitajax reoslve()")
-				resolve(reqPerformed);
+				// resolve(reqPerformed);
+				resolve();
 				return;
 			}
 			timeout -= 1;
-			reqPerformed = true;
+			// reqPerformed = true;
 		}, 0);
 	});
 }
@@ -395,11 +398,6 @@ Crawler.prototype.bootstrapPage = async function(){
 	var crawler = this;
 	// generate a static map of random values using a "static" seed for input fields
 	// the same seed generates the same values
-	// generated values MUST be the same for all analyze.js call othewise the same form will look different
-	// for example if a page sends a form to itself with input=random1,
-	// the same form on the same page (after first post) will became input=random2
-	// => form.data1 != form.data2 => form.data2 is considered a different request and it'll be crawled.
-	// this process will lead to and infinite loop!
 	var inputValues = utils.generateRandomValues(this.options.randomSeed);
 
 	this._allowNewWindows = true;
@@ -412,29 +410,6 @@ Crawler.prototype.bootstrapPage = async function(){
 	if(options.bypassCSP){
 		await page.setBypassCSP(true);
 	}
-
-	// setTimeout(async function reqloop(){
-	// 	for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
-	// 		let r = crawler._pendingRequests[i];
-	// 		let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
-	// 		if(r.p.response()){
-	// 			let rtxt = null;
-	// 			try{
-	// 				rtxt = await r.p.response().text();
-	// 			} catch(e){}
-	// 			await crawler.dispatchProbeEvent(events[r.h.type], {
-	// 				request: r.h,
-	// 				response: rtxt
-	// 			});
-	// 			crawler._pendingRequests.splice(i, 1);
-	// 		}
-	// 		if(r.p.failure()){
-	// 			//console.log("*** FAILUREResponse for " + r.p.url())
-	// 			crawler._pendingRequests.splice(i, 1);
-	// 		}
-	// 	}
-	// 	setTimeout(reqloop, 50);
-	// }, 50);
 
 	page.on('request', async req => {
 		const overrides = {};
@@ -487,16 +462,8 @@ Crawler.prototype.bootstrapPage = async function(){
 		dialog.accept();
 	});
 
-	// this._browser.on("targetcreated", async (target)=>{
-	// 	const p = await target.page();
-	// 	if(p) p.close();
-	// });
-
-
 	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
-
 	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
-
 	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
 
 	 await page.setViewport({
@@ -505,9 +472,7 @@ Crawler.prototype.bootstrapPage = async function(){
 	});
 
 	page.evaluateOnNewDocument(probe.initProbe, this.options, inputValues);
-	//page.evaluateOnNewDocument(probeTextComparator.initTextComparator);
 	page.evaluateOnNewDocument(utils.initJs, this.options);
-
 
 	try{
 		if(options.referer){
@@ -707,19 +672,22 @@ Crawler.prototype.getElementText = async function(el){
 Crawler.prototype.fillInputValues = async function(el){
 	await this._page.evaluate(el => {
 		window.__PROBE__.fillInputValues(el);
-	}, el != this._page ? el : this.documentElement)
+	}, el != this._page ? el : this.documentElement);
 }
-
-
 
 Crawler.prototype.getElementSelector = async function(el){
-	await this._page.evaluate(el => {
-		window.__PROBE__.getElementSelector(el);
-	}, el != this._page ? el : this.documentElement)
+	return await this._page.evaluate(el => {
+		return window.__PROBE__.getElementSelector(el);
+	}, el != this._page ? el : this.documentElement);
 }
 
+Crawler.prototype.getTotalDomMutations = async function(){
+	return await this._page.evaluate(() => {
+		return window.__PROBE__.totalDOMMutations;
+	});
+}
 
-Crawler.prototype._crawlDOM = async function(node, layer){
+Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 	if(this._stop) return;
 
 	node = node || this._page;
@@ -729,8 +697,11 @@ Crawler.prototype._crawlDOM = async function(node, layer){
 		return;
 	}
 	// console.log(">>>>:" + layer)
-	var domArr = await this.getDOMTreeAsArray(node);
 
+	// domArr is present when, during recursion, we had to call getDOMTreeAsArray()
+	// before calling _crawlDOM(). In this case we pass the result of getDOMTreeAsArray
+	// to _crawlDOM to avoit calling it twice
+	domArr = domArr || await this.getDOMTreeAsArray(node);
 	this._trigger = {};
 	if(this.options.crawlmode == "random"){
 		this.randomizeArray(domArr);
@@ -739,9 +710,8 @@ Crawler.prototype._crawlDOM = async function(node, layer){
 	var dom = [node].concat(domArr);
 	var	newEls;
 	var newRoot;
+	var newRoots;
 	var uRet;
-
-	// await this.fillInputValues(node);
 
 	if(layer == 0){
 		await this.dispatchProbeEvent("start");
@@ -767,57 +737,67 @@ Crawler.prototype._crawlDOM = async function(node, layer){
 
 			//console.log("waiting requests to compete " + this._pendingRequests)
 			await this.waitForRequestsCompletion();
-			//console.log("waiting requests to compete.... DONE"  + this._pendingRequests)
 
-			newEls = [];
+			newRoots = [];
 			newRoot = await this.popMutation();
 			while(newRoot.asElement()){
-				newEls.push(newRoot);
+				newRoots.push(newRoot);
 				newRoot = await this.popMutation();
 			}
-
-			for(var a = newEls.length - 1; a >= 0; a--){
-				var txt = await this.getElementText(newEls[a]);
-				if(!txt || txt.length < 50){
-					continue;
-				}
-				// @TODO use textComparator
-				if(txt && this.domModifications.indexOf(txt) != -1){
-					newEls.splice(a, 1);
-				}
-			}
-
-			if(newEls.length > 0){
-				if(this.options.skipDuplicateContent){
-					for(var a = 0; a < newEls.length; a++){
-						var txt = await this.getElementText(newEls[a]);
-						if(txt){
-							this.domModifications.push(txt);
+			newEls = [];
+			const totDomMutations = await this.getTotalDomMutations();  // note: used only id options.skipDuplicateContent
+			
+			for(let root of newRoots){
+				const domArr = this.options.skipDuplicateContent ? await this.getDOMTreeAsArray(root) : null;
+				if(domArr){
+					const dedup = this.domDeduplicator.addNode(domArr, totDomMutations);
+					if(dedup.added === false){
+						
+						// if the difference, in percentage, of the totDomMutations now and the ones at time when the element was first seen
+						// is less than 30% AND the element has been seen more than 12 times
+						// then skip that element
+						// if(((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations < 90 && dedup.seenCount > 12){
+						if(dedup.seenCount > 50){
+							console.log("22222222---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
+							continue;
+						}
+						console.log("00000---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
+						if(((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations < 90 && dedup.seenCount > 12){
+							console.log("11111---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
+							continue;
 						}
 					}
 				}
-				// console.log("added elements " + newEls.length)
-				if(this.options.crawlmode == "random"){
-					this.randomizeArray(newEls);
-				}
-				for(let ne of newEls){
-					if(this._stop) return;
-					await this.fillInputValues(ne);
-				}
-				for(let ne of newEls){
-					if(this._stop) return;
-					uRet = await this.dispatchProbeEvent("newdom", {
-						rootNode: await this.getElementSelector(ne),
-						trigger: this._trigger,
-						layer: layer
-					});
-					if(uRet)
-						await this._crawlDOM(ne, layer + 1);
-				}
-
+				newEls.push({
+					node: root,
+					domArr: domArr  // cache getDOMTreeAsArray() result for next recursion call
+				});
 			}
-		}
 
+			if(newEls.length == 0){
+				continue;
+			}
+			// randomize root nodes if requested
+			if(this.options.crawlmode == "random"){
+				this.randomizeArray(newEls);
+			}
+			for(let ne of newEls){
+				if(this._stop) return;
+				await this.fillInputValues(ne.node);
+			}
+			for(let ne of newEls){
+				if(this._stop) return;
+				uRet = await this.dispatchProbeEvent("newdom", {
+					rootNode: await this.getElementSelector(ne.node),
+					trigger: this._trigger,
+					layer: layer
+				});
+				if(uRet){
+					await this._crawlDOM(ne.node, layer + 1, ne.domArr);
+				}
+			}
+		
+		}
 	}
 }
 
