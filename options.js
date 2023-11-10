@@ -1,7 +1,7 @@
 /*
-HTCRAWL - 1.0
-http://htcrawl.org
-Author: filippo.cavallarin@wearesegment.com
+HTCRAWL
+https://github.com/fcavallarin/htcrawl
+Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -10,7 +10,6 @@ version.
 */
 
 exports.options = {
-	id: 0,
 	verbose: false,
 	checkAjax: true,
 	fillValues: true,

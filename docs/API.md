@@ -303,7 +303,7 @@ Object used to hold informations about a request.
 - `extra_headers` &lt;Object&gt; Extra HTTP headers
 
 
-# Object: Custom UI``
+# Object: Custom UI
 Object used to configure the custom UI (the interface with the browser's extension). The browser's extension can be generated with `npx htcrawl lib scaffold <dir>`.
 
 - `extensionPath` &lt;sting&gt; The path to the extension's folder
