@@ -1,7 +1,7 @@
 /*
-HTCRAWL - 1.0
-http://htcrawl.org
-Author: filippo.cavallarin@wearesegment.com
+HTCRAWL
+https://github.com/fcavallarin/htcrawl
+Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -10,7 +10,6 @@ version.
 */
 
 exports.options = {
-	id: 0,
 	verbose: false,
 	checkAjax: true,
 	fillValues: true,
@@ -18,7 +17,7 @@ exports.options = {
 	checkWebsockets: true,
 	searchUrls: true,
 	jsonOutput:true,
-	maxExecTime: 300000, // 300 seconds - remove me!
+	maxExecTime: 300000, // 300 seconds
 	ajaxTimeout:3000,
 	printAjaxPostData: true,
 	loadImages: false,
@@ -78,5 +77,8 @@ exports.options = {
 	simulateRealEvents: true,
 	crawlmode: "linear", // linear || random
 	browserLocalstorage: null,
-	skipDuplicateContent: false
+	skipDuplicateContent: false,
+	windowSize: [1600, 1000],
+	showUI: false,
+	customUI: null,
 };

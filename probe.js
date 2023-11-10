@@ -1,6 +1,6 @@
 /*
-HTCRAWL - 1.0
-http://htcrawl.org
+HTCRAWL
+https://github.com/fcavallarin/htcrawl
 Author: filippo@fcvl.net
 
 This program is free software; you can redistribute it and/or modify it under
@@ -8,6 +8,7 @@ the terms of the GNU General Public License as published by the Free Software
 Foundation; either version 2 of the License, or (at your option) any later
 version.
 */
+
 
 "use strict";
 
@@ -47,7 +48,7 @@ function initProbe(options, inputValues){
 		this._pendingWebsocket = [];
 		this.inputValues = inputValues;
 		this.currentUserScriptParameters = [];
-		this.domModifications = [];
+		// this.domModifications = [];
 
 		this._lastRequestId = 0;
 		this.started_at = null;
@@ -57,11 +58,10 @@ function initProbe(options, inputValues){
 		this.setTimeout = window.setTimeout.bind(window);
 		this.setInterval = window.setInterval.bind(window);
 
-
-
 		this.DOMMutations = [];
 		this.DOMMutationsToPop = [];
-
+		this.totalDOMMutations = 0;
+		this.UI = null;
 	};
 
 
@@ -140,17 +140,6 @@ function initProbe(options, inputValues){
 		return true;
 	}
 
-
-	/*
-		anchor.protocol; // => "http:"
-		anchor.host;     // => "example.com:3000"
-		anchor.hostname; // => "example.com"
-		anchor.port;     // => "3000"
-		anchor.pathname; // => "/pathname/"
-		anchor.hash;     // => "#hash"
-		anchor.search;   // => "?search=test"
-	*/
-
 	Probe.prototype.replaceUrlQuery = function(url, qs){
 		var anchor = document.createElement("a");
 		anchor.href = url;
@@ -167,7 +156,6 @@ function initProbe(options, inputValues){
 			if(pars[a].split("=")[0] == par)
 				pars.splice(a,1);
 		}
-
 
 		return anchor.protocol + "//" + anchor.host + anchor.pathname + (pars.length > 0 ? "?" + pars.join("&") : "") + anchor.hash;
 	};
@@ -328,8 +316,6 @@ function initProbe(options, inputValues){
 			case 'datetime-local':
 				el.value = getv('datetimeLocal');
 				break;
-
-
 			default:
 				return false;
 		}
@@ -490,18 +476,15 @@ function initProbe(options, inputValues){
 	};
 
 
-
-
-
 	Probe.prototype.triggerElementEvent = function(element, event){
 		var teObj = {el: element, ev: event};
 		//this.curElement = {};
 		this.setTrigger({});
 		if(!event)return
+		// TODO objectInArrray is slow! the triggeredEvents array constantly grows and degrades performances
 		if(!this.isEventTriggerable(event) || this.objectInArray(this.triggeredEvents, teObj))
 			return
-		//this.curElement.element = element;
-		//this.curElement.event = event;
+
 		this.setTrigger({element: element, event:event});
 		this.triggeredEvents.push(teObj);
 		this.trigger(element, event);
@@ -561,10 +544,7 @@ function initProbe(options, inputValues){
 	};
 
 	Probe.prototype.getElementSelector = function(element){
-		if(!element || !(element instanceof HTMLElement)){
-			if(element instanceof SVGPathElement){
-				return "SVG";
-			}
+		if(!element || (!(element instanceof HTMLElement) && !(element instanceof SVGElement))){
 			return "";
 		}
 		var name = element.nodeName.toLowerCase();
@@ -672,15 +652,15 @@ function initProbe(options, inputValues){
 
 
 
-	Probe.prototype.simhashDistance = function(s1, s2){
-		var x = (s1 ^ s2) & ((1 << 64) - 1);
-		var ans = 0;
-		while(x){
-			ans += 1;
-			x &= x - 1;
-		}
-		return ans;
-	}
+	// Probe.prototype.simhashDistance = function(s1, s2){
+	// 	var x = (s1 ^ s2) & ((1 << 64) - 1);
+	// 	var ans = 0;
+	// 	while(x){
+	// 		ans += 1;
+	// 		x &= x - 1;
+	// 	}
+	// 	return ans;
+	// }
 
 
 
@@ -777,8 +757,6 @@ function initProbe(options, inputValues){
 
 	};
 
-
-
 	// returns true if at least one request is performed
 	Probe.prototype.waitRequests = async function(requests){
 		var _this = this;
@@ -798,8 +776,6 @@ function initProbe(options, inputValues){
 			}, 0);
 		});
 	}
-
-
 
 	Probe.prototype.waitJsonp = async function(){
 		await this.waitRequests(this._pendingJsonp);
@@ -875,20 +851,81 @@ function initProbe(options, inputValues){
 		return p;
 	};
 
-
 	Probe.prototype.setTrigger = function(value){
 		this.curElement = value;
 		window.__htcrawl_set_trigger__(this.getTrigger()); // should be awaited...
 	}
 
 
+	Probe.prototype.buildUI = function(){
+		const UI = {
+			dispatch: (name, params) => window.__htcrawl_ui_event__(name, params),
+			utils: {
+				getElementSelector: this.getElementSelector,
+				createElement: (name, style, parent) => {
+					const e = document.createElement(name);
+					e.setAttribute("data-htcrawl_crawl_excluded_element", "1");
+					for(const s in style){
+						e.style[s] = style[s];
+					}
+					if(typeof parent == 'undefined'){
+						document.getElementsByTagName("body")[0].appendChild(e);
+					}
+					if(parent){
+						parent.appendChild(e);
+					}
+					return e;
+				},
+				selectElement: () => {
+					let selectedElement;
+					const overlaySelector = UI.utils.createElement("div", {
+						position: 'absolute',
+						backgroundColor: '#0000004a',
+						border: '1px solid #ffffff',
+						zIndex: 2147483640
+					});
+
+					const moveHandler = ev => {
+						overlaySelector.style.display = 'none';
+						const curEl = document.elementFromPoint(ev.clientX, ev.clientY);
+						overlaySelector.style.display = 'block';
+
+						if(selectedElement == curEl){
+							return;
+						}
+						if(selectedElement != null){
+							selectedElement = null;
+						}
+						if(!curEl){
+							return;
+						}
+						const r = curEl.getBoundingClientRect();
+						overlaySelector.style.width = r.width + "px";
+						overlaySelector.style.height = r.height + "px";
+						overlaySelector.style.left = (r.left + document.documentElement.scrollLeft) + "px";
+						overlaySelector.style.top = (r.top + document.documentElement.scrollTop) + "px";
+						selectedElement = curEl;				
+					};
+
+					document.addEventListener('mousemove', moveHandler);
+					return new Promise((resolve, reject) => {
+						overlaySelector.onclick = ev => {
+							ev.stopPropagation();
+							overlaySelector.parentElement.removeChild(overlaySelector);
+							document.removeEventListener('mousemove', moveHandler);
+							resolve(UI.utils.getElementSelector(selectedElement));
+						}
+					});
+				}
+			}
+		}
+		this.UI = UI;
+	}
 	// Probe.prototype.sleep = function(n){
 	// 	return new Promise(resolve => {
 	// 		this.setTimeout(resolve, n);
 	// 	});
 	// };
-
-
 
 	window.__PROBE__ = new Probe(options, inputValues);
 };

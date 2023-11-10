@@ -1,0 +1,1 @@
+// Empty service_worker used as proxy between node and the UI (devtools panel)
