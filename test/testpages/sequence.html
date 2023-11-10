@@ -1,0 +1,23 @@
+<html>
+<head>
+</head>
+
+<body>
+	<div>
+		username:<input  id=user><br>
+		password: <input type=password id=password><br>
+		<button id=btn>login</button>
+	</div>
+
+	<script>
+	document.querySelector("#btn").onclick = function(){
+		const user = document.querySelector("#user").value;
+		const pass = document.querySelector("#password").value;
+		if(user == "user1" && pass == "pw3889"){
+			document.cookie = "secretkey";
+			document.location.href = "auth.html";
+		}
+	}
+	</script>
+</body>
+</html>

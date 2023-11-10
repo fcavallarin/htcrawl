@@ -100,6 +100,7 @@ Creates a new browser's page (a new tab). If `url` is provided, the new page wil
 Send a `message`` to the UI (the browser's extension).
 
 ## crawler.on(event, function)
+Registers an event handler.
 - `event` &lt;string&gt; Event name
 - `function` &lt;function(Object, Crawler)&gt; A function that will be called with two arguments:
     - `eventObject` &lt;Object&gt; Object containing event name parameters
@@ -107,6 +108,9 @@ Send a `message`` to the UI (the browser's extension).
         - `params` &lt;Object&gt; Event parameters
     - `crawler` &lt;Object&gt; Crawler instance.
 
+## crawler.removeEvent(event)
+Removes an event handler.
+- `event` &lt;string&gt; Event name
 
 ## Events
 The following events are emitted during crawling. Some events can be cancelled by returning false.
