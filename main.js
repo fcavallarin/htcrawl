@@ -74,16 +74,18 @@ exports.launch = async function(url, options){
 	setTimeout(async function reqloop(){
 		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
 			let r = crawler._pendingRequests[i];
-			let events = {xhr: "xhrCompleted", fetch: "fetchCompleted"};
+			let events = {xhr: "xhrcompleted", fetch: "fetchcompleted"};
 			if(r.p.response()){
 				let rtxt = null;
 				try{
 					rtxt = await r.p.response().text();
 				} catch(e){}
-				await crawler.dispatchProbeEvent(events[r.h.type], {
-					request: r.h,
-					response: rtxt
-				});
+				if(crawler.isEventRegistered(events[r.h.type])){
+					await crawler.dispatchProbeEvent(events[r.h.type], {
+						request: r.h,
+						response: rtxt
+					});
+				}
 				crawler._pendingRequests.splice(i, 1);
 			}
 			if(r.p.failure()){
@@ -127,31 +129,27 @@ function Crawler(targetUrl, options, browser){
 	this.error_codes = ["contentType","navigation","response"];
 
 	this.probeEvents = {
-		start: function(){},
-		xhr: function(){},
-		xhrcompleted: function(){},
-		fetch: function(){},
-		fetchcompleted: function(){},
-		jsonp: function(){},
-		jsonpcompleted: function(){},
-		websocket: function(){},
-		websocketmessage: function(){},
-		websocketsend: function(){},
-		formsubmit: function(){},
-		fillinput: function(){},
-		//requestscompleted: function(){},
-		//dommodified: function(){},
-		newdom: function(){},
-		navigation: function(){},
-		domcontentloaded: function(){},
-		//blockedrequest: function(){},
-		redirect: function(){},
+		start: null,
+		xhr: null,
+		xhrcompleted: null,
+		fetch: null,
+		fetchcompleted: null,
+		jsonp: null,
+		jsonpcompleted: null,
+		websocket: null,
+		websocketmessage: null,
+		websocketsend: null,
+		formsubmit: null,
+		fillinput: null,
+		newdom: null,
+		navigation: null,
+		domcontentloaded: null,
+		redirect: null,
 		earlydetach: null,
 		triggerevent: null,
 		eventtriggered: null,
-		pageinitialized: function(){},
+		pageinitialized: null,
 		crawlelement: null,
-		//end: function(){}
 	}
 
 	this.UIEvents = {};
@@ -299,9 +297,13 @@ Crawler.prototype._afterNavigation = async function(resp){
 		this.domDeduplicator.reset();
 		this._loaded = true;
 
-		await this.dispatchProbeEvent("domcontentloaded", {});
+		if(this.isEventRegistered("domcontentloaded")){
+			await this.dispatchProbeEvent("domcontentloaded", {});
+		}
 		await this.waitForRequestsCompletion();
-		await this.dispatchProbeEvent("pageinitialized", {});
+		if(this.isEventRegistered("pageinitialized")){
+			await this.dispatchProbeEvent("pageinitialized", {});
+		}
 		await this._startMutationObserver();
 		if(this.options.showUI){
 			if(this.options.customUI){
@@ -357,6 +359,14 @@ Crawler.prototype.on = function(eventName, handler){
 		throw("unknown event name: " + eventName);
 	}
 	this.probeEvents[eventName] = handler;
+};
+
+Crawler.prototype.removeEvent = function(eventName){
+	eventName = eventName.toLowerCase();
+	if(!(eventName in this.probeEvents)){
+		throw("unknown event name: " + eventName);
+	}
+	this.probeEvents[eventName] = null;
 };
 
 
@@ -420,7 +430,10 @@ Crawler.prototype.handleRequest = async function(req){
 	// Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
 	let ro = {p:req, h:r};
 	this._pendingRequests.push(ro);
-	let uRet = await this.dispatchProbeEvent(type, {request:r});
+	let uRet = true;
+	if(this.isEventRegistered(type)){
+		uRet = await this.dispatchProbeEvent(type, {request:r});
+	}
 	if(uRet){
 		req.continue();
 	} else {
@@ -448,8 +461,7 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 }
 
 Crawler.prototype.bootstrapPage = async function(){
-	var options = this.options,
-		pageCookies = this.pageCookies;
+	var options = this.options;
 
 	var crawler = this;
 	// generate a static map of random values using a "static" seed for input fields
@@ -471,7 +483,10 @@ Crawler.prototype.bootstrapPage = async function(){
 		if(req.isNavigationRequest() && req.frame() == page.mainFrame()){
 			if(req.redirectChain().length > 0 && !crawler._allowNavigation){
 				crawler._redirect = req.url();
-				var uRet = await crawler.dispatchProbeEvent("redirect", {url: crawler._redirect});
+				var uRet = true;
+				if(crawler.isEventRegistered("redirect")){
+					uRet = await crawler.dispatchProbeEvent("redirect", {url: crawler._redirect});
+				}
 				if(!uRet){
 					req.abort('aborted'); // die silently
 					return;
@@ -486,7 +501,9 @@ Crawler.prototype.bootstrapPage = async function(){
 
 			if(!crawler._firstRun){
 				let r = new utils.Request("navigation", req.method() || "GET", req.url().split("#")[0], req.postData());
-				await crawler.dispatchProbeEvent("navigation", {request:r});
+				if(crawler.isEventRegistered("navigation")){
+					await crawler.dispatchProbeEvent("navigation", {request:r});
+				}
 
 				if(crawler._allowNavigation){
 					req.continue();
@@ -517,7 +534,11 @@ Crawler.prototype.bootstrapPage = async function(){
 		dialog.accept();
 	});
 
-	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
+	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  { // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
+		if(this.isEventRegistered(name)){
+			return this.dispatchProbeEvent(name, params);
+		}
+	});
 	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
 	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
 	page.exposeFunction("__htcrawl_ui_event__", (name, params) => {return this.dispatchUIEvent(name, params)});
@@ -537,13 +558,17 @@ Crawler.prototype.bootstrapPage = async function(){
 			await page.setExtraHTTPHeaders(options.extraHeaders);
 		}
 		for(let i=0; i < options.setCookies.length; i++){
-			if(!options.setCookies[i].expires)
+			if(!options.setCookies[i].expires){
 				options.setCookies[i].expires = parseInt((new Date()).getTime() / 1000) + (60*60*24*365);
-			try{
-				await page.setCookie(options.setCookies[i]);
-			}catch (e){
-				//console.log(e)
 			}
+			if(!options.setCookies[i].url || !options.setCookies[i].domain){
+				options.setCookies[i].url = this.targetUrl;
+			}
+			if(!options.setCookies[i].value){
+				options.setCookies[i].value = "";
+			}
+
+			await page.setCookie(options.setCookies[i]);
 		}
 
 		if(options.httpAuth){
@@ -768,7 +793,9 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 
 	if(layer == 0){
 		await this._resetMutationObserver();
-		await this.dispatchProbeEvent("start");
+		if(this.isEventRegistered("start")){
+			await this.dispatchProbeEvent("start");
+		}
 	}
 
 	//let analyzed = 0;
@@ -855,15 +882,16 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 			}
 			for(let ne of newEls){
 				if(this._stop) return;
+				uRet = true;
 				if(this.isEventRegistered("newdom")){
 					uRet = await this.dispatchProbeEvent("newdom", {
 						rootNode: await this.getElementSelector(ne.node),
 						trigger: this._trigger,
 						layer: layer
 					});
-					if(uRet){
-						await this._crawlDOM(ne.node, layer + 1, ne.domArr);
-					}
+				}
+				if(uRet){
+					await this._crawlDOM(ne.node, layer + 1, ne.domArr);
 				}
 			}
 		}
