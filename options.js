@@ -78,5 +78,8 @@ exports.options = {
 	simulateRealEvents: true,
 	crawlmode: "linear", // linear || random
 	browserLocalstorage: null,
-	skipDuplicateContent: false
+	skipDuplicateContent: false,
+	windowSize: [1600, 1000],
+	showUI: false,
+	customUI: null,
 };

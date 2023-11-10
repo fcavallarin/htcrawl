@@ -54,6 +54,9 @@ htcap.launch(targetUrl, options).then(crawler => {
   - `navigationTimeout` &lt;number&gt; Sets the navigation timeout. Defaults to 10000.
   - `bypassCSP` &lt;boolean&gt; Whether to bypass CSP settings. Defaults to true.
   - `skipDuplicateContent`  &lt;boolean&gt; Use heuristic content deduplication. Defaults to true.
+  - `windowSize` &lt;int[]&gt; width and height of the browser's window.
+  - `showUI`  &lt;boolean&gt; Show the UI as devtools panel. It implies 'openChromeDevtoos=true'
+  - `customUI`  &lt;Object&gt; Configure the custom UI. It implies 'showUI=true'. See [Custom UI](#object-custom-ui) section.
 
 
 ## crawler.load()
@@ -93,9 +96,12 @@ Returns Puppeteer's Page instance.
 ## crawler.newPage(url)
 Creates a new browser's page (a new tab). If `url` is provided, the new page will navigate to that URL when `load()` or `start()` are called.
 
+## crawler.sendToUI(message)
+Send a `message`` to the UI (the browser's extension).
+
 ## crawler.on(event, function)
 - `event` &lt;string&gt; Event name
-- `function` &lt;function(Object, Crawler)] A function that will be called with two arguments:
+- `function` &lt;function(Object, Crawler)&gt; A function that will be called with two arguments:
     - `eventObject` &lt;Object&gt; Object containing event name parameters
         - `name` &lt;string&gt; Event name
         - `params` &lt;Object&gt; Event parameters
@@ -259,14 +265,14 @@ Emitted when an element is detached before it has been analyzed.
 Cancellable: False  
 Parameters:
 
-- `node` &lt;string&gt; Css selector of the detached element
+- `element` &lt;string&gt; Css selector of the detached element
 
 ### triggerevent
 Emitted before triggering an event. This event is available only after start()  
 Cancellable: True  
 Parameters:
 
-- `node` &lt;string&gt; Css selector of the element
+- `element` &lt;string&gt; Css selector of the element
 - `event` &lt;string&gt; Event name
 
 ### eventtriggered
@@ -274,7 +280,15 @@ Emitted after en event has been triggered.  This event is available only after s
 Cancellable: False  
 Parameters:
 
-- `node` &lt;string&gt; Css selector of the element
+- `element` &lt;string&gt; Css selector of the element
+- `event` &lt;string&gt; Event name
+
+### crawlelement
+Emitted when starting crawling a new element.
+Cancellable: False
+Parameters:
+
+- `element` &lt;string&gt; Css selector of the element
 - `event` &lt;string&gt; Event name
 
 
@@ -289,6 +303,56 @@ Object used to hold informations about a request.
 - `extra_headers` &lt;Object&gt; Extra HTTP headers
 
 
+# Object: Custom UI``
+Object used to configure the custom UI (the interface with the browser's extension). The browser's extension can be generated with `npx htcrawl lib scaffold <dir>`.
+
+- `extensionPath` &lt;sting&gt; The path to the extension's folder
+- `UIMethods` &lt;Function&gt; A function that is evaluated in the page's context that is used to set up the methods that are invoked from the browser's extension. It takes the `UI` object as parameter.
+- `events` &lt;object&gt; Object containing the events that are triggered from the methods defined in 'UIMethods'
+
+## Object UI
+Object that can be extended with custom methods. It resides in the context of the page.  
+By default, it contains two properties:
+- `dispatch` &lt;Function&gt; Dispatch a message to the crawler (node-side)
+- `utils` &lt;object&gt; Some utilities to interact with the page:
+
+  - `getElementSelector` &lt;Function&gt; Returns the CSS selector of the given element
+  - `createElement` &lt;Function&gt; Creates a new element in the page that is excluded from crawlng. It takes the following arguments:
+    - `name`: &lt;sting&gt; The type of element to create (e.g., 'div', 'span')
+    - `style`: &lt;object&gt; CSS styles to apply
+    - `parent`: &lt;HTMLElement&gt; Parent element to append to. If omitted, the element is appended to 'body'. If `null` the element is not attached to the DOM.
+  - `selectElement` &lt;Function&gt; Enables the user to select an element on the webpage by moving the cursor over it. It visually highlights the currently hovered element with an overlay and returns a promise that resolves to the selector of the clicked element.
+
+
+## Example
+
+```js
+const customUI = {
+    extensionPath: __dirname + '/chrome-extension',
+    UIMethods: UI => {  // Evaluated in the context of the page
+        UI.start = () => {
+            UI.dispatch("start")
+        }
+    },
+    events: {  // Events triggered by 'UI.dispatch()' from the page context
+        start: async e => {
+            await crawler.start();
+            // Sent a message to the browser extension
+            crawler.sendToUI("DONE")
+        },
+    }
+```
+In the extension's `ui-panel.js` file:
+
+```js
+document.getElementById('start').onclick = () => {
+  pageEval("UI.start()");
+};
+
+onCrawlerMessage( message => {
+  document.getElementById("console").innerText += message + "\n";
+});
+```
 
 
 

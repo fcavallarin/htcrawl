@@ -21,6 +21,15 @@ const process = require('process');
 
 exports.launch = async function(url, options){
 	options = options || {};
+	for(const a in defaults){
+		if(!(a in options)) options[a] = defaults[a];
+	}
+	if(options.customUI){
+		options.showUI = true;
+	}
+	if(options.showUI){
+		options.openChromeDevtoos = true;
+	}
 	const chromeArgs = [
 		'--no-sandbox',
 		'--disable-setuid-sandbox',
@@ -34,22 +43,33 @@ exports.launch = async function(url, options){
 		'--disable-web-security',
 		'--allow-running-insecure-content',
 		'--proxy-bypass-list=<-loopback>',
-		'--window-size=1300,1000'
+		`--window-size=${options.windowSize.join(",")}`
 	];
-	for(let a in defaults){
-		if(!(a in options)) options[a] = defaults[a];
-	}
+
 	if(options.proxy){
 		chromeArgs.push("--proxy-server=" + options.proxy);
+	}
+
+	if(options.showUI){
+		const extpath = options.customUI ? options.customUI.extensionPath : `${__dirname}/ui/chrome-extension`;
+		chromeArgs.push(
+			`--disable-extensions-except=${extpath}`,
+			`--load-extension=${extpath}`
+		);
 	}
 
 	if(options.openChromeDevtoos){
 		chromeArgs.push('--auto-open-devtools-for-tabs');
 	}
 
-	var browser = await puppeteer.launch({headless: options.headlessChrome, ignoreHTTPSErrors: true, args:chromeArgs});
+	var browser = await puppeteer.launch({
+		headless: options.headlessChrome ? 'new' : false,
+		ignoreHTTPSErrors: true,
+		args:chromeArgs
+	});
 	var crawler = new Crawler(url, options, browser);
 	await crawler.bootstrapPage();
+
 	setTimeout(async function reqloop(){
 		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
 			let r = crawler._pendingRequests[i];
@@ -125,13 +145,15 @@ function Crawler(targetUrl, options, browser){
 		domcontentloaded: function(){},
 		//blockedrequest: function(){},
 		redirect: function(){},
-		earlydetach: function(){},
-		triggerevent: function(){},
-		eventtriggered: function(){},
-		pageinitialized: function(){}
+		earlydetach: null,
+		triggerevent: null,
+		eventtriggered: null,
+		pageinitialized: function(){},
+		crawlelement: null,
 		//end: function(){}
 	}
 
+	this.UIEvents = {};
 
 	this.options = options;
 
@@ -145,6 +167,10 @@ function Crawler(targetUrl, options, browser){
 	// this.domModifications = [];
 	this._stop = false;
 	this.domDeduplicator = new DOMDeduplicator();
+	this._status = {
+		layer: null,
+		curElement: null
+	}
 }
 
 Crawler.prototype._setTargetUrl = function(url){
@@ -214,6 +240,38 @@ Crawler.prototype._goto = async function(url){
 	}
 	return ret;
 }
+
+Crawler.prototype._startMutationObserver = async function(){
+	await this._page.evaluate(async function(){
+		const exclided = [Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE, Node.COMMENT_NODE];
+		window.__PROBE__.DOMMutations = [];  // <--- @TODO .. why here??
+		let observer = new MutationObserver(mutations => {
+			for(let m of mutations){
+				if(m.type != 'childList' || m.addedNodes.length == 0)continue;
+				for(let e of m.addedNodes){
+					// Skip text nodes since popMutation ensure it's an alement with asElement
+					if(exclided.indexOf(e.nodeType) != -1 ||
+						(e.getAttribute && e.getAttribute("data-htcrawl_crawl_excluded_element"))
+					){
+						continue;
+					}
+					window.__PROBE__.totalDOMMutations++;
+					window.__PROBE__.DOMMutations.push(e);
+				}
+			}
+		});
+		observer.observe(document.documentElement, {childList: true, subtree: true});
+	});
+}
+
+Crawler.prototype._resetMutationObserver = async function(){
+	await this._page.evaluate(async function(){
+		window.__PROBE__.DOMMutations = [];
+		window.__PROBE__.DOMMutationsToPop = [];
+		window.__PROBE__.totalDOMMutations = 0;
+	});
+}
+
 Crawler.prototype._afterNavigation = async function(resp){
 	var assertContentType = function(hdrs){
 		let ctype = 'content-type' in hdrs ? hdrs['content-type'] : "";
@@ -228,8 +286,6 @@ Crawler.prototype._afterNavigation = async function(resp){
 		if(!resp.ok()){
 			this._errors.push(["response", resp.request().url() + " status: " + resp.status()]);
 			throw resp.status();
-			//this.dispatchProbeEvent("end", {});
-			//return;
 		}
 		var hdrs = resp.headers();
 		this._cookies = utils.parseCookiesFromHeaders(hdrs, resp.url())
@@ -239,27 +295,20 @@ Crawler.prototype._afterNavigation = async function(resp){
 			throw "Content type is not text/html";
 		}
 		this.documentElement = await this._page.evaluateHandle( () => document.documentElement);
-		await this._page.evaluate(async function(){
-			window.__PROBE__.DOMMutations = [];  // <--- @TODO .. why here??
-			let observer = new MutationObserver(mutations => {
-				for(let m of mutations){
-					if(m.type != 'childList' || m.addedNodes.length == 0)continue;
-					for(let e of m.addedNodes){
-						window.__PROBE__.totalDOMMutations++;
-						window.__PROBE__.DOMMutations.push(e);
-					}
-				}
-			});
-			observer.observe(document.documentElement, {childList: true, subtree: true});
-		});
 		this.domDeduplicator.reset();
-	
-		// @TODO reset also probe ?(!!) like this.DOMMutations = [] and this.DOMMutationsToPop = [] ...
 		this._loaded = true;
 
 		await this.dispatchProbeEvent("domcontentloaded", {});
 		await this.waitForRequestsCompletion();
 		await this.dispatchProbeEvent("pageinitialized", {});
+		await this._startMutationObserver();
+		if(this.options.showUI){
+			if(this.options.customUI){
+				this._setUI(this.options.customUI);
+			} else {
+				this._setDefaultUI();
+			}
+		}
 		return this;
 	}catch(e){
 		//;
@@ -275,16 +324,16 @@ Crawler.prototype.waitForRequestsCompletion = async function(){
 	});
 };
 
-Crawler.prototype.start = async function(){
-
+Crawler.prototype.start = async function(node){
 	if(!this._loaded){
 		await this.load();
 	}
+	node = node || this._page;
 
 	try {
 		this._stop = false;
-		await this.fillInputValues(this._page);
-		await this._crawlDOM();
+		await this.fillInputValues(node);
+		await this._crawlDOM(node);
 		return this;
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
@@ -341,6 +390,14 @@ Crawler.prototype.dispatchProbeEvent = async function(name, params) {
 	return true;
 }
 
+Crawler.prototype.dispatchUIEvent = async function(name, params) {
+	const evt = {
+		name: name,
+		params: params || {}
+	};
+	await this.UIEvents[name](evt, this);
+}
+
 Crawler.prototype.handleRequest = async function(req){
 	let extrah = req.headers();
 	let type = req.resourceType(); // xhr || fetch
@@ -380,8 +437,6 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 		var t = setInterval(function(){
 			if(timeout <= 0 || requests.length == 0){
 				clearInterval(t);
-				//console.log("waitajax reoslve()")
-				// resolve(reqPerformed);
 				resolve();
 				return;
 			}
@@ -405,7 +460,6 @@ Crawler.prototype.bootstrapPage = async function(){
 	this._allowNewWindows = false;
 
 	crawler._page = page;
-	//if(options.verbose)console.log("new page")
 	await page.setRequestInterception(true);
 	if(options.bypassCSP){
 		await page.setBypassCSP(true);
@@ -465,11 +519,9 @@ Crawler.prototype.bootstrapPage = async function(){
 	page.exposeFunction("__htcrawl_probe_event__",   (name, params) =>  {return this.dispatchProbeEvent(name, params)}); // <- automatically awaited.."If the puppeteerFunction returns a Promise, it will be awaited."
 	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
 	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
+	page.exposeFunction("__htcrawl_ui_event__", (name, params) => {return this.dispatchUIEvent(name, params)});
 
-	 await page.setViewport({
-		width: 1366,
-		height: 768,
-	});
+	await page.setViewport({width:0, height:0});
 
 	page.evaluateOnNewDocument(probe.initProbe, this.options, inputValues);
 	page.evaluateOnNewDocument(utils.initJs, this.options);
@@ -486,7 +538,6 @@ Crawler.prototype.bootstrapPage = async function(){
 		for(let i=0; i < options.setCookies.length; i++){
 			if(!options.setCookies[i].expires)
 				options.setCookies[i].expires = parseInt((new Date()).getTime() / 1000) + (60*60*24*365);
-			//console.log(options.setCookies[i]);
 			try{
 				await page.setCookie(options.setCookies[i]);
 			}catch (e){
@@ -528,7 +579,7 @@ Crawler.prototype.navigate = async function(url){  // @TODO test me ( see _first
 		resp = await this._goto(url);
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
-		throw("Navigation error");
+		throw("Navigation error 2");
 	}
 
 	await this._afterNavigation(resp);
@@ -545,7 +596,7 @@ Crawler.prototype.reload = async function(){
 		resp = await this._page.reload({waitUntil:'load'});
 	}catch(e){
 		this._errors.push(["navigation","navigation aborted"]);
-		throw("Navigation error");
+		throw("Navigation error 3");
 	}finally{
 		this._allowNavigation = false;
 	}
@@ -568,7 +619,7 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 			throw("Element not found")
 		}
 	}
-	if(typeof timeout == 'undefined') timeout = 500;
+	if(typeof timeout == 'undefined') timeout = 5000;
 
 	this._allowNavigation = true;
 	// await this._page.evaluate(() => window.__PROBE__.DOMMutations=[]);
@@ -581,6 +632,7 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 		]);
 
 	} catch(e){
+		console.log(e)
 		pa = null;
 	}
 	this._allowNavigation = false;
@@ -590,16 +642,12 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 		return true;
 	}
 	_this._errors.push(["navigation","navigation aborted"]);
-	throw("Navigation error");
+	throw("Navigation error 1");
 };
-
-
 
 Crawler.prototype.popMutation = async function(){
 	return await this._page.evaluateHandle(() => window.__PROBE__.popMutation())
 }
-
-
 
 Crawler.prototype.getEventsForElement = async function(el){
 	const events = await this._page.evaluate( el => window.__PROBE__.getEventsForElement(el), el != this._page ? el : this.documentElement);
@@ -612,12 +660,10 @@ Crawler.prototype.getEventsForElement = async function(el){
 Crawler.prototype.getDOMTreeAsArray = async function(node){
 	var out = [];
 	try{
-		var children = await node.$$(":scope > *");
+		// Note: * returns only nodes of type Element but it returns also XMLElement and SVGElement
+		var children = await node.$$(":scope > *:not([data-htcrawl_crawl_excluded_element])");
 	}catch(e){
 		return []
-		//console.log("Evaluation failed: TypeError: element.querySelectorAll is not a function")
-		//console.log(node)
-
 	}
 
 	if(children.length == 0){
@@ -631,10 +677,6 @@ Crawler.prototype.getDOMTreeAsArray = async function(node){
 
 	return out;
 }
-
-
-
-
 
 Crawler.prototype.isAttachedToDOM = async function(node){
 	if(node == this._page){
@@ -687,16 +729,26 @@ Crawler.prototype.getTotalDomMutations = async function(){
 	});
 }
 
+Crawler.prototype.isEventRegistered = function(event){
+	return !!this.probeEvents[event];
+}
+
 Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 	if(this._stop) return;
 
-	node = node || this._page;
+	/// node = node || this._page;
 	layer = typeof layer != 'undefined' ? layer : 0;
 	if(layer == this.options.maximumRecursion){
 		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
 		return;
 	}
-	// console.log(">>>>:" + layer)
+	
+	if(this.isEventRegistered("crawlelement")){
+		// do not await
+		this.dispatchProbeEvent("crawlelement", {
+			element: await this.getElementSelector(node)
+		});
+	}
 
 	// domArr is present when, during recursion, we had to call getDOMTreeAsArray()
 	// before calling _crawlDOM(). In this case we pass the result of getDOMTreeAsArray
@@ -714,28 +766,48 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 	var uRet;
 
 	if(layer == 0){
+		await this._resetMutationObserver();
 		await this.dispatchProbeEvent("start");
 	}
 
 	//let analyzed = 0;
 	for(let el of dom){
 		if(this._stop) return;
-		//console.log("analyze element " + el);
-		let elsel = await this.getElementSelector(el);
-		if(! await this.isAttachedToDOM(el)){ // @TODO TEST ME
-			uRet = await this.dispatchProbeEvent("earlydetach", { node: elsel });
+		// let elsel = await this.getElementSelector(el);  // AVOID calling getElementSelector since it's slow!
+		let elsel = null;
+		if(this.isEventRegistered("earlydetach") && ! await this.isAttachedToDOM(el)){ // avoid await as much as we can
+			elsel = await this.getElementSelector(el);
+			uRet = await this.dispatchProbeEvent("earlydetach", {
+				node: elsel, // For backward compatibility
+				element: elsel
+			});
 			if(!uRet) continue;
 		}
+
 		for(let event of await this.getEventsForElement(el)){
 			if(this._stop) return;
 			if(this.options.triggerEvents){
-				uRet = await this.dispatchProbeEvent("triggerevent", {node: elsel, event: event});
-				if(!uRet) continue;
+				if(this.isEventRegistered("triggerevent")){ // avoid await as much as we can
+					elsel = elsel || await this.getElementSelector(el);
+					uRet = await this.dispatchProbeEvent("triggerevent", {
+						node: elsel, // For backward compatibility
+						element: elsel,
+						event: event
+					});
+					if(!uRet) continue;
+				}
 				await this.triggerElementEvent(el, event);
-				await this.dispatchProbeEvent("eventtriggered", {node: elsel, event: event});
+				if(this.isEventRegistered("eventtriggered")){ // avoid await as much as we can
+					elsel = elsel || await this.getElementSelector(el);
+					await this.dispatchProbeEvent("eventtriggered", {
+						node: elsel, // For backward compatibility
+						element: elsel,
+						event: event
+					});
+				}
 			}
 
-			//console.log("waiting requests to compete " + this._pendingRequests)
+			// console.log("waiting requests to compete " + this._pendingRequests)
 			await this.waitForRequestsCompletion();
 
 			newRoots = [];
@@ -752,18 +824,13 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 				if(domArr){
 					const dedup = this.domDeduplicator.addNode(domArr, totDomMutations);
 					if(dedup.added === false){
-						
+						if(dedup.seenCount > 50){
+							continue;
+						}
 						// if the difference, in percentage, of the totDomMutations now and the ones at time when the element was first seen
 						// is less than 30% AND the element has been seen more than 12 times
 						// then skip that element
-						// if(((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations < 90 && dedup.seenCount > 12){
-						if(dedup.seenCount > 50){
-							console.log("22222222---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
-							continue;
-						}
-						console.log("00000---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
 						if(((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations < 90 && dedup.seenCount > 12){
-							console.log("11111---> " + dedup.seenCount + " " + (((totDomMutations - dedup.totDomMutations) * 100 ) / totDomMutations));
 							continue;
 						}
 					}
@@ -787,16 +854,17 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 			}
 			for(let ne of newEls){
 				if(this._stop) return;
-				uRet = await this.dispatchProbeEvent("newdom", {
-					rootNode: await this.getElementSelector(ne.node),
-					trigger: this._trigger,
-					layer: layer
-				});
-				if(uRet){
-					await this._crawlDOM(ne.node, layer + 1, ne.domArr);
+				if(this.isEventRegistered("newdom")){
+					uRet = await this.dispatchProbeEvent("newdom", {
+						rootNode: await this.getElementSelector(ne.node),
+						trigger: this._trigger,
+						layer: layer
+					});
+					if(uRet){
+						await this._crawlDOM(ne.node, layer + 1, ne.domArr);
+					}
 				}
 			}
-		
 		}
 	}
 }
@@ -834,3 +902,71 @@ Crawler.prototype.randomizeArray = function(arr) {
 	}
 };
 
+
+Crawler.prototype.sendToUI = async function(message) {
+	if(!this.options.showUI){
+		throw "UI is not enabled";
+	}
+	const serviceWorker = await this._browser.waitForTarget(
+		target => target.type() === 'service_worker'
+	);
+	const w = await serviceWorker.worker();
+	try{
+		 w.evaluate(message => {
+		 	try{
+				chrome.runtime.sendMessage({body: message});
+			} catch(e){}
+		}, message);
+	} catch(e){}
+};
+
+Crawler.prototype._setUI = async function(ui){
+	for(const e in ui.events){
+		this.UIEvents[e] = ui.events[e];
+	}
+
+	await this._page.evaluate(async function(){
+		window.__PROBE__.buildUI();
+	});
+
+	const builder = `(() => 
+		(${ui.UIMethods.toString()})(window.__PROBE__.UI)
+	)()`;
+	await this._page.evaluate(builder);
+};
+
+Crawler.prototype._setDefaultUI = async function(ui){
+	this._setUI({
+		UIMethods: UI => {
+			UI.crawlElement = () => {
+				UI.utils.selectElement().then( e => UI.dispatch(`crawlElement`, {element: e}))
+			};
+			UI.start = () => {
+				UI.dispatch("start")
+			}
+			UI.stop = () => {
+				UI.dispatch("stop")
+			}
+			UI.clickToNavigate = () =>{
+				UI.utils.selectElement().then( e => UI.dispatch(`clickToNavigate`, {element: e}))
+			}
+		},
+		events: {
+			crawlElement: async e => {
+				const el = await this.page().$(e.params.element);
+				await this.start(el)
+				this.sendToUI("DONE")
+			},
+			start: async e => {
+				await this.start();
+				this.sendToUI("DONE")
+			},
+			stop: e => {
+				this.stop();
+			},
+			clickToNavigate: e => {
+				this.clickToNavigate(e.params.element)
+			}
+		}
+	});
+};
