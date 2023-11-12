@@ -21,6 +21,10 @@ document.getElementById('click-to-navigate').onclick = () => {
   pageEval("UI.clickToNavigate()")
 };
 
+document.getElementById('login').onclick = () => {
+  pageEval("UI.login()")
+};
+
 document.getElementById('clear-console').onclick = () => {
   document.getElementById('console').innerText = "";
 };

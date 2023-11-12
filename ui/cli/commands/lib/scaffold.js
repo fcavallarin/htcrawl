@@ -38,6 +38,9 @@ const customUI = {
         UI.stop = () => {
             UI.dispatch("stop")
         }
+        UI.login = () => {
+            UI.dispatch("login");
+        }
         UI.clickToNavigate = () =>{
             UI.utils.selectElement().then( e => UI.dispatch('clickToNavigate', {element: e}))
         }
@@ -54,6 +57,12 @@ const customUI = {
         },
         stop: e => {
             crawler.stop();
+        },
+        login: async e => {
+            const p = await crawler.newDetachedPage();
+            p.on("close", async () =>{
+                await crawler.reload();
+            })
         },
         clickToNavigate: e => {
             crawler.clickToNavigate(e.params.element)
