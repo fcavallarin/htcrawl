@@ -17,17 +17,27 @@ Some examples of what (else) you can do with htcrawl:
 
 ```javascript
 const htcrawl = require('htcrawl');
+
 (async () => {
   const crawler = await htcrawl.launch("https://htcrawl.org");
 
-  // Print out the url of ajax calls
+  // Print the url of ajax calls
   crawler.on("xhr", e => {
-    console.log("XHR to " + e.params.request.url);
+    console.log(`XHR to ${e.params.request.url}`);
+  });
+
+  // Print the selector of newly created DOM elements
+  crawler.on("newdom", async (event, crawler) => {
+    console.log(`New DOM element created: ${event.params.element}`);
+  });
+
+  // Print all events triggered by the crawler
+  crawler.on("triggerevent", async (event, crawler) => {
+    console.log(`Triggered ${event.params.event} on '${event.params.element}'`);
   });
 
   // Start crawling!
   await crawler.start();
-  await crawler.browser().close();
 })();
 ```
 ## DOCUMENTATION
@@ -51,7 +61,7 @@ The crawl lasted for many hours and about 3000 XHR request have been captured.
 
 ```js
 const targetUrl = "https://fcvl.net/htcap/scanme/ng/";
-const options = {headlessChrome:1};
+const options = {headlessChrome: true};
 
 function printEmails(string){
     const emails = string.match(/([a-z0-9._-]+@[a-z0-9._-]+\.[a-z]+)/gi);
@@ -85,7 +95,7 @@ The example below shows a very basic DOM-XSS scanner implementation. For an adva
 
 ```js
 const targetUrl="https://fcvl.net/htcap/scanme/domxss.php";
-const options = {headlessChrome:1};
+const options = {headlessChrome: true};
 var pmap = {};
 
 const payloads = [

@@ -97,13 +97,12 @@ exports.launch = async function(url, options){
 	}, 50);
 
 	browser.on("targetcreated", async (target)=>{
-		if(crawler._allowNewWindows){
+		if(crawler._allowNewWindows || target.type() != 'page'){
 			return;
 		}
 		const p = await target.page();
 		if(p) p.close();
 	});
-
 	return crawler;
 };
 
@@ -272,7 +271,7 @@ Crawler.prototype._resetMutationObserver = async function(){
 }
 
 Crawler.prototype._afterNavigation = async function(resp){
-	var assertContentType = function(hdrs){
+	var assertContentType = (hdrs) => {
 		let ctype = 'content-type' in hdrs ? hdrs['content-type'] : "";
 
 		if(ctype.toLowerCase().split(";")[0] != "text/html"){
@@ -344,8 +343,6 @@ Crawler.prototype.start = async function(node){
 		throw e;
 	}
 }
-
-
 
 
 Crawler.prototype.stop = function(){
@@ -467,7 +464,6 @@ Crawler.prototype.bootstrapPage = async function(){
 	// generate a static map of random values using a "static" seed for input fields
 	// the same seed generates the same values
 	var inputValues = utils.generateRandomValues(this.options.randomSeed);
-
 	this._allowNewWindows = true;
 	const page = await this._browser.newPage();
 	this._allowNewWindows = false;
@@ -596,6 +592,23 @@ Crawler.prototype.newPage = async function(url){
 	await this.bootstrapPage();
 }
 
+Crawler.prototype.newDetachedPage = async function(url){
+	this._allowNewWindows = true;
+	const page = await this._browser.newPage();
+	this._allowNewWindows = false;
+
+	await page.setViewport({width:0, height:0});
+	if(url){
+		try{
+			await page.goto(url, {waitUntil:'load'});
+		}catch(e){
+			this._errors.push(["navigation","navigation aborted"]);
+			throw("Navigation error 4");
+		}
+	}
+	return page;
+}
+
 Crawler.prototype.navigate = async function(url){  // @TODO test me ( see _firstRun)
 	if(!this._loaded){
 		throw("Crawler must be loaded before navigate");
@@ -618,6 +631,7 @@ Crawler.prototype.reload = async function(){
 	}
 	var resp = null;
 	this._allowNavigation = true;
+	await this._page.setCacheEnabled(false);
 	try{
 		resp = await this._page.reload({waitUntil:'load'});
 	}catch(e){
@@ -625,8 +639,8 @@ Crawler.prototype.reload = async function(){
 		throw("Navigation error 3");
 	}finally{
 		this._allowNavigation = false;
+		await this._page.setCacheEnabled(true);
 	}
-
 	await this._afterNavigation(resp);
 
 };
@@ -656,7 +670,6 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 			this._page.waitForRequest(req => req.isNavigationRequest() && req.frame() == _this._page.mainFrame(), {timeout:timeout}),
 			this._page.waitForNavigation({waitUntil:'load'})
 		]);
-
 	} catch(e){
 		console.log(e)
 		pa = null;
@@ -936,17 +949,27 @@ Crawler.prototype.sendToUI = async function(message) {
 	if(!this.options.showUI){
 		throw "UI is not enabled";
 	}
-	const serviceWorker = await this._browser.waitForTarget(
-		target => target.type() === 'service_worker'
-	);
+	let serviceWorker;
+	try{
+		serviceWorker = await this._browser.waitForTarget(
+			target => target.type() === 'service_worker'
+		, {timeout: 1000});
+	}catch(e){
+		console.log("Warning: cannot send message to UI, service worker not running");
+		return;
+	}
 	const w = await serviceWorker.worker();
 	try{
 		 w.evaluate(message => {
-		 	try{
+			try{
 				chrome.runtime.sendMessage({body: message});
-			} catch(e){}
+			}catch(e){
+				console.log(e);
+			}
 		}, message);
-	} catch(e){}
+	} catch(e){
+		console.log(`Warning: cannot send message to UI ${e}`);
+	}
 };
 
 Crawler.prototype._setUI = async function(ui){
@@ -967,17 +990,22 @@ Crawler.prototype._setUI = async function(ui){
 Crawler.prototype._setDefaultUI = async function(ui){
 	this._setUI({
 		UIMethods: UI => {
-			UI.crawlElement = () => {
-				UI.utils.selectElement().then( e => UI.dispatch(`crawlElement`, {element: e}))
+			UI.crawlElement = async () => {
+				const el = await UI.utils.selectElement();
+				UI.dispatch(`crawlElement`, {element: el});
 			};
 			UI.start = () => {
-				UI.dispatch("start")
+				UI.dispatch("start");
 			}
 			UI.stop = () => {
-				UI.dispatch("stop")
+				UI.dispatch("stop");
 			}
-			UI.clickToNavigate = () =>{
-				UI.utils.selectElement().then( e => UI.dispatch(`clickToNavigate`, {element: e}))
+			UI.login = () => {
+				UI.dispatch("login");
+			}
+			UI.clickToNavigate = async () =>{
+				const el = await UI.utils.selectElement();
+				UI.dispatch(`clickToNavigate`, {element: el});
 			}
 		},
 		events: {
@@ -992,6 +1020,13 @@ Crawler.prototype._setDefaultUI = async function(ui){
 			},
 			stop: e => {
 				this.stop();
+			},
+			login: async e => {
+				const p = await this.newDetachedPage();
+				await p.evaluate(() => document.write("<h2>Close this page when done</h2>"));
+				p.on("close", async () =>{
+					await this.reload();
+				})
 			},
 			clickToNavigate: e => {
 				this.clickToNavigate(e.params.element)

@@ -32,7 +32,7 @@ const run = async tests => {
 };
 
 const definedTests = {
-    sequence: async name => {
+    login: async name => {
         const crawler = await htcrawl.launch(`${URL}/${name}.html`, {
             ...options,
         });
@@ -112,6 +112,20 @@ const definedTests = {
             out(`${name}: expected ${expectedFetch} found ${totFetch}`);
         }
         await assertURL(name, crawler);
+        await crawler.browser().close();
+    },
+
+    reload: async name => {
+        const crawler = await htcrawl.launch(`${URL}/fetch.html`, {
+            ...options,
+        });
+        crawler.on("pageinitialized", async (event, crawler) => {
+		    crawler.removeEvent("pageinitialized");
+		    await crawler.reload();
+            await crawler.start();
+            await assertURL(name, crawler);
+        });
+        await crawler.load();
         await crawler.browser().close();
     },
 };

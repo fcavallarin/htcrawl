@@ -60,19 +60,25 @@ htcap.launch(targetUrl, options).then(crawler => {
 
 
 ## crawler.load()
-Loads targetUrl. Resolves when the crawling is finished.  
+Loads targetUrl. Resolves when the page is loaded and ready for crawling.  
 Returns: &lt;Promise&lt;Crawler&gt;&gt;
 
 ## crawler.start()
 Loads targetUrl and starts crawling. Resolves when the crawling is finished.  
 Returns: &lt;Promise&lt;Crawler&gt;&gt;
 
+Example:
+
+```js
+const crawler = await htcrawl.launch("https://fcvl.net");
+await crawler.start();
+```
+
 ## crawler.stop()
 Requests the crawling to stop. It makes `start()` to resolve "immediately".
 
-
 ## crawler.navigate(url)
-Navigates to `url`. Resolves when the page is loaded.  
+Navigates to `url`. Resolves when the the navigation is completed.  
 Returns: &lt;Promise&gt;
 
 ## crawler.reload()
@@ -80,7 +86,7 @@ Reload the current page. Resolves when the page is loaded.
 Returns: &lt;Promise&gt;
 
 ## crawler.clickToNavigate(selector, timeout)
-Clicks on selector and waits for timeout milliseconds for the navigation to be started. Resolves when the page is loaded.  
+Clicks on selector and waits for timeout milliseconds for the navigation to be started. Resolves when the navigation is completed.  
 Returns: &lt;Promise&gt;
 
 ## crawler.waitForRequestsCompletion()
@@ -94,8 +100,21 @@ Returns Puppeteer's Browser instance.
 Returns Puppeteer's Page instance.
 
 ## crawler.newPage(url)
-Creates a new browser's page (a new tab). If `url` is provided, the new page will navigate to that URL when `load()` or `start()` are called.
+Creates a new browser's page (a new tab). If `url` is provided, the new page will navigate to that URL when `load()` or `start()` are called.  
 
+## crawler.newDetachedPage(url)
+Creates a new browser's page (a new tab) that is detached form the crawler. If `url` is provided, the new page will navigate to that URL.  
+It's intended to be used in non-headless mode to perform logins or similar actions.
+Returns the page instance.
+
+Example:
+```js
+const page = await crawler.newDetachedPage("login-page");
+// Start crawling when the user closes the page
+page.on("close", async () =>{
+  await crawler.start();
+})
+```
 ## crawler.sendToUI(message)
 Send a `message`` to the UI (the browser's extension).
 
@@ -133,6 +152,14 @@ Parameters:
 
 - `request` &lt;Object&gt; Instance of Request class
 
+Example:
+
+```js
+  crawler.on("xhr", e => {
+    console.log("XHR to " + e.params.request.url);
+  });
+```
+
 ### xhrcompleted
 Emitted when an ajax request is completed.  
 Cancellable: False  
@@ -140,7 +167,6 @@ Parameters:
 
 - `request` &lt;Object&gt; Instance of Request class
 - `response` &lt;string&gt; Response text
-- `timedout` &lt;boolean&gt; Whether the request is timed out
 
 ### fetch
 Emitted before sending a fetch request.  
@@ -148,7 +174,7 @@ Cancellable: True
 Parameters:
 
 - `request` &lt;Object&gt; Instance of Request class
-
+- `response` &lt;string&gt; Response text
 
 ### fetchcompleted
 Emitted when a fetch request is completed.  

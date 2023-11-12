@@ -33,8 +33,6 @@
 				html = "<div><div><input type=text id=i" + CNT + "><button onclick=next()>next</button><span>Current: "+CNT+"</span></div><div>";
 				CNT++;
 			}
-			//document.querySelector("#target").innerHTML += html;
-			console.log(html)
 			const wrapper = document.createElement("div");
 			wrapper.innerHTML = html;
 			document.querySelector("#target").appendChild(wrapper);

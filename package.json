@@ -26,7 +26,9 @@
     "SPA",
     "headless-chrome"
   ],
-  "bin": "./ui/cli/main.js",
+  "bin": {
+    "htcrawl": "./ui/cli/main.js"
+  },
   "bugs": {
     "url": "https://github.com/fcavallarin/htcrawl/issues"
   },
