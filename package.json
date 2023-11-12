@@ -1,6 +1,6 @@
 {
   "name": "htcrawl",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "crawler for single page applications",
   "main": "main.js",
   "dependencies": {
@@ -32,5 +32,5 @@
   "bugs": {
     "url": "https://github.com/fcavallarin/htcrawl/issues"
   },
-  "homepage": "https://htcrawl.org"
+  "homepage": "https://github.com/fcavallarin/htcrawl"
 }
