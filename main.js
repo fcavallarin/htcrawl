@@ -21,7 +21,7 @@ const utils = require('./utils');
 const process = require('process');
 
 exports.launch = async function(url, options){
-	options = options || {};
+	options = {...options} || {};
 	for(const a in defaults){
 		if(!(a in options)) options[a] = defaults[a];
 	}
