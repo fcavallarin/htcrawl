@@ -41,7 +41,7 @@ htcap.launch(targetUrl, options).then(crawler => {
   - `loadWithPost` &lt;boolean&gt; Whether to load page with POST method.
   - `postData` &lt;string&gt; Setd the data to be sent wia post.
   - `headlessChrome` &lt;boolean&gt; Whether to run chrome in headless mode.
-  - `openChromeDevtoos` &lt;boolean&gt; Whether to open chrome devtools.
+  - `openChromeDevtools` &lt;boolean&gt; Whether to open chrome devtools. It implies headlessChrome=false.
   - `extraHeaders` &lt;Object&gt; Sets additional http headers.
   - `maximumRecursion` &lt;number&gt; Sets the limit of DOM recursion. Defaults to 15.
   - `maximumAjaxChain` &lt;number&gt; Sets the maximum number of chained ajax requests. Defaults to 30.
@@ -55,7 +55,7 @@ htcap.launch(targetUrl, options).then(crawler => {
   - `bypassCSP` &lt;boolean&gt; Whether to bypass CSP settings. Defaults to true.
   - `skipDuplicateContent`  &lt;boolean&gt; Use heuristic content deduplication. Defaults to true.
   - `windowSize` &lt;int[]&gt; width and height of the browser's window.
-  - `showUI`  &lt;boolean&gt; Show the UI as devtools panel. It implies 'openChromeDevtoos=true'
+  - `showUI`  &lt;boolean&gt; Show the UI as devtools panel. It implies 'openChromeDevtools=true'
   - `customUI`  &lt;Object&gt; Configure the custom UI. It implies 'showUI=true'. See [Custom UI](#object-custom-ui) section.
 
 
@@ -351,7 +351,7 @@ By default, it contains two properties:
     - `name`: &lt;sting&gt; The type of element to create (e.g., 'div', 'span')
     - `style`: &lt;object&gt; CSS styles to apply
     - `parent`: &lt;HTMLElement&gt; Parent element to append to. If omitted, the element is appended to 'body'. If `null` the element is not attached to the DOM.
-  - `selectElement` &lt;Function&gt; Enables the user to select an element on the webpage by moving the cursor over it. It visually highlights the currently hovered element with an overlay and returns a promise that resolves to the selector of the clicked element.
+  - `selectElement` &lt;Function&gt; Enables the user to select an element on the webpage by moving the cursor over it. It visually highlights the currently hovered element with an overlay and returns a promise that resolves to an Object containing the element and its selector.
 
 
 ## Example

@@ -6,6 +6,11 @@
 	<div>
 		username:<input  id=user><br>
 		password: <input type=password id=password><br>
+		role: <select>
+			<option value="admin">Admin</option>
+			<option value="super-admin">Super Admin</option>
+		</select>
+		<br>
 		<button id=btn>login</button>
 	</div>
 
@@ -17,6 +22,7 @@
 			document.cookie = "secretkey=1";
 			document.location.href = "auth.html";
 		}
+		document.location.href = "auth.html"
 	}
 	</script>
 </body>

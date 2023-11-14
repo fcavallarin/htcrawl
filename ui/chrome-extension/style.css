@@ -9,7 +9,7 @@ html, body {
 
 .flex-end {
   display: flex;
-  justify-content: flex-end; /* Allinea gli elementi a destra */
+  justify-content: flex-end;
 }
 
 .header {
