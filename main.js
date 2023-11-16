@@ -29,8 +29,12 @@ exports.launch = async function(url, options){
 		options.showUI = true;
 	}
 	if(options.showUI){
-		options.openChromeDevtoos = true;
+		options.openChromeDevtools = true;
 	}
+	if(options.openChromeDevtools){
+		options.headlessChrome = false;
+	}
+
 	const chromeArgs = [
 		'--no-sandbox',
 		'--disable-setuid-sandbox',
@@ -59,7 +63,7 @@ exports.launch = async function(url, options){
 		);
 	}
 
-	if(options.openChromeDevtoos){
+	if(options.openChromeDevtools){
 		chromeArgs.push('--auto-open-devtools-for-tabs');
 	}
 
@@ -962,7 +966,7 @@ Crawler.prototype.sendToUI = async function(message) {
 	try{
 		 w.evaluate(message => {
 			try{
-				chrome.runtime.sendMessage({body: message});
+				sendMessage(message);
 			}catch(e){
 				console.log(e);
 			}
@@ -992,7 +996,7 @@ Crawler.prototype._setDefaultUI = async function(ui){
 		UIMethods: UI => {
 			UI.crawlElement = async () => {
 				const el = await UI.utils.selectElement();
-				UI.dispatch(`crawlElement`, {element: el});
+				UI.dispatch(`crawlElement`, {element: el.selector});
 			};
 			UI.start = () => {
 				UI.dispatch("start");
@@ -1005,7 +1009,7 @@ Crawler.prototype._setDefaultUI = async function(ui){
 			}
 			UI.clickToNavigate = async () =>{
 				const el = await UI.utils.selectElement();
-				UI.dispatch(`clickToNavigate`, {element: el});
+				UI.dispatch(`clickToNavigate`, {element: el.selector});
 			}
 		},
 		events: {
@@ -1029,7 +1033,7 @@ Crawler.prototype._setDefaultUI = async function(ui){
 				})
 			},
 			clickToNavigate: e => {
-				this.clickToNavigate(e.params.element)
+				this.clickToNavigate(e.params.element);
 			}
 		}
 	});

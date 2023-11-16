@@ -552,7 +552,7 @@ function initProbe(options, inputValues){
 		var selector = ""
 		var id = element.getAttribute("id");
 
-		if(id && id.match(/^[a-z][a-z0-9\-_:\.]*$/i)){
+		if(id && id.match(/^[a-z][a-z0-9\-_:\.]*$/i) && document.querySelectorAll(`#${id}`).length == 1){
 			selector = "#" + id;
 		} else {
 			let p = element;
@@ -913,7 +913,10 @@ function initProbe(options, inputValues){
 							ev.stopPropagation();
 							overlaySelector.parentElement.removeChild(overlaySelector);
 							document.removeEventListener('mousemove', moveHandler);
-							resolve(UI.utils.getElementSelector(selectedElement));
+							resolve({
+								element: selectedElement,
+								selector: UI.utils.getElementSelector(selectedElement),
+							});
 						}
 					});
 				}

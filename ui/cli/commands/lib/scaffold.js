@@ -25,24 +25,28 @@ function copyDir(source, target) {
 
 const prog = `\
 const htcrawl = require('htcrawl');
-const URL = "url";
+const URL = process.argv[2];
+
+let crawler;
 const customUI = {
     extensionPath: __dirname + '/chrome-extension',
     UIMethods: UI => {  // Evaluated in the context of the page
-        UI.crawlElement = () => {
-            UI.utils.selectElement().then( e => UI.dispatch('crawlElement', {element: e}))
+        UI.crawlElement = async () => {
+            const el = await UI.utils.selectElement();
+            UI.dispatch('crawlElement', {element: el.selector});
         };
         UI.start = () => {
-            UI.dispatch("start")
+            UI.dispatch("start");
         }
         UI.stop = () => {
-            UI.dispatch("stop")
+            UI.dispatch("stop");
         }
         UI.login = () => {
             UI.dispatch("login");
         }
-        UI.clickToNavigate = () =>{
-            UI.utils.selectElement().then( e => UI.dispatch('clickToNavigate', {element: e}))
+        UI.clickToNavigate = async () =>{
+            const el = await UI.utils.selectElement();
+            UI.dispatch('clickToNavigate', {element: el.selector});
         }
     },
     events: {  // Events triggered by 'UI.dispatch()' for the page context
@@ -60,26 +64,26 @@ const customUI = {
         },
         login: async e => {
             const p = await crawler.newDetachedPage();
+            await p.evaluate(() => document.write("<h2>Close this page when done</h2>"));
             p.on("close", async () =>{
                 await crawler.reload();
             })
         },
         clickToNavigate: e => {
-            crawler.clickToNavigate(e.params.element)
+            crawler.clickToNavigate(e.params.element);
         }
     }
 };
-(async () =>{
-    const crawler = await htcrawl.launch(URL, {
+
+(async () => {
+    crawler = await htcrawl.launch(URL, {
         headlessChrome: false,
         skipDuplicateContent:true,
-        openChromeDevtoos:true,
+        openChromeDevtools:true,
         customUI: customUI
     });
     await crawler.load();
-    await crawler.browser().close();
-    process.exit(0);
-})();    
+})();
 `
 
 
