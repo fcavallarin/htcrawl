@@ -75,25 +75,6 @@ exports.Request = Request;
 
 	}
 
-
-
-	// // @TODO is this needed???
-	// Node.prototype.originalRemoveChild = Node.prototype.removeChild;
-	// Node.prototype.removeChild = function(node){
-	// 	if(!node.__analyzed){
-	// 		//console.log("elem not analyzed "+ window.__PROBE__.stringifyElement(node) )
-	// 		//console.log(window.__PROBE__.getTrigger());
-	// 	}
-	// 	this.__removed = true;
-	// 	if(this instanceof HTMLElement){
-	// 		for (let c of this.getElementsByTagName("*"))
-	// 			c.__removed = true;
-	// 	}
-	// 	return this.originalRemoveChild(node);
-	// }
-
-
-
 	HTMLFormElement.prototype.originalSubmit = HTMLFormElement.prototype.submit;
 	HTMLFormElement.prototype.submit = function(){
 		window.__PROBE__.triggerFormSubmitEvent(this);
@@ -115,8 +96,6 @@ exports.Request = Request;
 			window.localStorage.setItem(l[0] , l[1]);
 		}
 	}
-
-
 
 }
 

@@ -16,6 +16,7 @@ const puppeteer = require('puppeteer');
 const defaults = require('./options').options;
 const probe = require("./probe");
 const DOMDeduplicator= require("./domdeduplicator").DOMDeduplicator;
+require('./custom-selectors.js');
 
 const utils = require('./utils');
 const process = require('process');
@@ -39,7 +40,7 @@ exports.launch = async function(url, options){
 		'--no-sandbox',
 		'--disable-setuid-sandbox',
 		'--disable-gpu',
-		'--hide-scrollbars',
+		// '--hide-scrollbars',
 		'--mute-audio',
 		'--ignore-certificate-errors',
 		'--ignore-certificate-errors-spki-list',
@@ -243,27 +244,14 @@ Crawler.prototype._goto = async function(url){
 	return ret;
 }
 
-Crawler.prototype._startMutationObserver = async function(){
-	await this._page.evaluate(async function(){
-		const exclided = [Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE, Node.COMMENT_NODE];
+
+
+Crawler.prototype._startMutationObserver = async function(element){
+	await this._page.evaluate(async function(element){
+		element = element || document.documentElement;
 		window.__PROBE__.DOMMutations = [];  // <--- @TODO .. why here??
-		let observer = new MutationObserver(mutations => {
-			for(let m of mutations){
-				if(m.type != 'childList' || m.addedNodes.length == 0)continue;
-				for(let e of m.addedNodes){
-					// Skip text nodes since popMutation ensure it's an alement with asElement
-					if(exclided.indexOf(e.nodeType) != -1 ||
-						(e.getAttribute && e.getAttribute("data-htcrawl_crawl_excluded_element"))
-					){
-						continue;
-					}
-					window.__PROBE__.totalDOMMutations++;
-					window.__PROBE__.DOMMutations.push(e);
-				}
-			}
-		});
-		observer.observe(document.documentElement, {childList: true, subtree: true});
-	});
+		window.__PROBE__._newMutationObserver(element);
+	}, element);
 }
 
 Crawler.prototype._resetMutationObserver = async function(){
@@ -542,11 +530,11 @@ Crawler.prototype.bootstrapPage = async function(){
 	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
 	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
 	page.exposeFunction("__htcrawl_ui_event__", (name, params) => {return this.dispatchUIEvent(name, params)});
-
-	await page.setViewport({width:0, height:0});
-
 	page.evaluateOnNewDocument(probe.initProbe, this.options, inputValues);
 	page.evaluateOnNewDocument(utils.initJs, this.options);
+
+
+	await page.setViewport({width:0, height:0});
 
 	try{
 		if(options.referer){
@@ -586,6 +574,15 @@ Crawler.prototype.bootstrapPage = async function(){
 		console.log(e)
 	}
 
+	page.on("frameattached", frame => {
+		frame.evaluate(() => {
+			try{
+				window.top.__PROBE__._newMutationObserver(document.documentElement);
+			}catch(e){
+				// Probably not on the same origin
+			}
+		});
+	});
 };
 
 Crawler.prototype.newPage = async function(url){
@@ -675,7 +672,6 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 			this._page.waitForNavigation({waitUntil:'load'})
 		]);
 	} catch(e){
-		console.log(e)
 		pa = null;
 	}
 	this._allowNavigation = false;
@@ -693,7 +689,8 @@ Crawler.prototype.popMutation = async function(){
 }
 
 Crawler.prototype.getEventsForElement = async function(el){
-	const events = await this._page.evaluate( el => window.__PROBE__.getEventsForElement(el), el != this._page ? el : this.documentElement);
+	let events;
+	events = await this._page.evaluate( el => window.__PROBE__.getEventsForElement(el), el != this._page ? el : this.documentElement);
 	const l = await this.getElementEventListeners(el);
 	return events.concat(l.listeners.map(i => i.type));
 }
@@ -703,9 +700,17 @@ Crawler.prototype.getEventsForElement = async function(el){
 Crawler.prototype.getDOMTreeAsArray = async function(node){
 	var out = [];
 	try{
+		const frame = 'contentFrame' in node ? await node.contentFrame() : null;
+		if(frame){
+			const frmSelector = await this.getElementSelector(node);
+			const frmHtmlSelector = frmSelector.startsWith("inframe/") ? `${frmSelector} ; html` : `inframe/${frmSelector} ; html`
+			node = await this._page.$(frmHtmlSelector);
+		}
 		// Note: * returns only nodes of type Element but it returns also XMLElement and SVGElement
 		var children = await node.$$(":scope > *:not([data-htcrawl_crawl_excluded_element])");
+
 	}catch(e){
+		// throw e
 		return []
 	}
 

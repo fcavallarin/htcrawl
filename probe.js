@@ -62,6 +62,7 @@ function initProbe(options, inputValues){
 		this.DOMMutationsToPop = [];
 		this.totalDOMMutations = 0;
 		this.UI = null;
+		this.originals = {};
 	};
 
 
@@ -76,7 +77,6 @@ function initProbe(options, inputValues){
 				if(elements.indexOf(p) != -1){
 					root = p;
 				}
-				//console.log(p)
 				p = p.parentNode;
 			}
 			if(root && rootElements.indexOf(root) == -1){
@@ -90,8 +90,7 @@ function initProbe(options, inputValues){
 
 
 	Probe.prototype.popMutation = function(){
-		const roots = this.getRootNodes(this.DOMMutations)
-		//console.log(roots)
+		const roots = this.getRootNodes(this.DOMMutations);
 		this.DOMMutations = [];
 		this.DOMMutationsToPop = this.DOMMutationsToPop.concat(roots);
 		const first = this.DOMMutationsToPop.splice(0,1);
@@ -543,8 +542,16 @@ function initProbe(options, inputValues){
 
 	};
 
-	Probe.prototype.getElementSelector = function(element){
-		if(!element || (!(element instanceof HTMLElement) && !(element instanceof SVGElement))){
+	Probe.prototype._isHTMLElement = function(element){
+		return element instanceof window.top.HTMLElement || element instanceof element.ownerDocument.defaultView.HTMLElement;
+	}
+
+	Probe.prototype._isSVGElement = function(element){
+		return element instanceof window.top.SVGElement || element instanceof element.ownerDocument.defaultView.SVGElement;
+	}
+
+	Probe.prototype._getElementSelector = function(element){
+		if(!element || (!this._isHTMLElement(element) && !this._isSVGElement(element))){
 			return "";
 		}
 		var name = element.nodeName.toLowerCase();
@@ -552,26 +559,42 @@ function initProbe(options, inputValues){
 		var selector = ""
 		var id = element.getAttribute("id");
 
-		if(id && id.match(/^[a-z][a-z0-9\-_:\.]*$/i) && document.querySelectorAll(`#${id}`).length == 1){
+		if(id && id.match(/^[a-z][a-z0-9\-_:\.]*$/i) && element.ownerDocument.querySelectorAll(`#${id}`).length == 1){
 			selector = "#" + id;
 		} else {
 			let p = element;
 			let cnt = 1;
 			while(p = p.previousSibling){
-				if(p instanceof HTMLElement && p.nodeName.toLowerCase() == name){
+				if( this._isHTMLElement(p) && p.nodeName.toLowerCase() == name){
 					cnt++;
 				}
 			}
 			selector = name + (cnt > 1 ? `:nth-of-type(${cnt})` : "");
-			if(element != document.documentElement && name != "body" && element.parentNode){
-				ret.push(this.getElementSelector(element.parentNode));
+			if(element != element.ownerDocument.documentElement && name != "body" && element.parentNode){
+				ret.push(this._getElementSelector(element.parentNode));
 			}
 		}
 		ret.push(selector);
 		return ret.join(" > ");
-	}
+	};
 
+	Probe.prototype.getElementSelector = function(element){
+		let elSelector = this._getElementSelector(element);
+		const selectors = !!elSelector ? [elSelector] : [];
+		let frame = element.ownerDocument.defaultView.frameElement;
+		while(frame){
+			elSelector = frame.ownerDocument.defaultView.__PROBE__._getElementSelector(frame);
+			if(elSelector){
+				selectors.push(elSelector);
+			}
+			frame = frame.ownerDocument.defaultView.frameElement;
+		}
+		if(selectors.length == 1){
+			return selectors[0];
+		}
 
+		return "inframe/" + selectors.reverse().join(" ; ");
+	};
 
 	Probe.prototype.getFormAsRequest = function(form){
 
@@ -665,7 +688,7 @@ function initProbe(options, inputValues){
 
 
 	Probe.prototype.jsonpHook = function(node){
-		if(!(node instanceof HTMLElement) || !node.matches("script")) return;
+		if(!this._isHTMLElement(node) || !node.matches("script")) return;
 		var src = node.getAttribute("src");
 		if(!src) return;
 		var _this = this;
@@ -728,9 +751,7 @@ function initProbe(options, inputValues){
 	Probe.prototype.triggerWebsocketSendEvent = async function(url, message){
 		var req  = new this.Request("websocket", "GET", url, null, null);
 		return await this.dispatchProbeEvent("websocketSend", { request: req, message: message});
-
 	}
-
 
 	Probe.prototype.triggerFormSubmitEvent = function(form){
 
@@ -861,7 +882,7 @@ function initProbe(options, inputValues){
 		const UI = {
 			dispatch: (name, params) => window.__htcrawl_ui_event__(name, params),
 			utils: {
-				getElementSelector: this.getElementSelector,
+				getElementSelector:e =>  this.getElementSelector(e),
 				createElement: (name, style, parent) => {
 					const e = document.createElement(name);
 					e.setAttribute("data-htcrawl_crawl_excluded_element", "1");
@@ -923,6 +944,27 @@ function initProbe(options, inputValues){
 			}
 		}
 		this.UI = UI;
+	}
+
+	Probe.prototype._newMutationObserver = function(element) {
+		const excluded = [Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE, Node.COMMENT_NODE];
+		let observer = new MutationObserver(mutations => {
+			for(let m of mutations){
+				if(m.type != 'childList' || m.addedNodes.length == 0)continue;
+				for(let e of m.addedNodes){
+					// Skip text nodes since popMutation ensure it's an alement with asElement
+					if(excluded.indexOf(e.nodeType) != -1 ||
+						(e.getAttribute && e.getAttribute("data-htcrawl_crawl_excluded_element"))
+					){
+						continue;
+					}
+					this.totalDOMMutations++;
+					this.DOMMutations.push(e);
+				}
+			}
+		});
+		observer.observe(element, {childList: true, subtree: true});
+		return observer;
 	}
 	// Probe.prototype.sleep = function(n){
 	// 	return new Promise(resolve => {

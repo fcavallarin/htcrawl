@@ -1,0 +1,18 @@
+<html>
+<head>
+</head>
+
+<body>
+	<div>
+		<!-- <iframe id=ifr src="inner-iframe.html"></iframe> -->
+		<button>new iframe</button>
+	</div>
+	<script>
+		document.querySelector("button").onclick = () => {
+			const i = document.createElement("iframe");
+			document.body.appendChild(i);
+			i.src="inner-iframe.html"
+		};
+	</script>
+</body>
+</html>

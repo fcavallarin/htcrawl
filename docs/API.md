@@ -118,6 +118,7 @@ page.on("close", async () =>{
 ## crawler.sendToUI(message)
 Send a `message`` to the UI (the browser's extension).
 
+
 ## crawler.on(event, function)
 Registers an event handler.
 - `event` &lt;string&gt; Event name
@@ -186,7 +187,7 @@ Parameters:
 
 ### jsonp
 Emitted before sending a jsonp request.  
-Cancellable: True  
+Cancellable: False  
 Parameters:
 
 - `request` &lt;Object&gt; Instance of Request class
@@ -251,7 +252,9 @@ crawler.on("fillinput" (e, crawler) => {
 
 ### newdom
 Emitted when new DOM content is added to the page.  
-Cancellable: False  
+If `false` is returned the new element won't be crawled.  
+Triggered only while crawling.  
+Cancellable: True  
 Parameters:
 
 - `rootNode` &lt;string&gt; Css selector of the root element
@@ -321,7 +324,6 @@ Parameters:
 - `element` &lt;string&gt; Css selector of the element
 - `event` &lt;string&gt; Event name
 
-
 # Object: Request
 Object used to hold informations about a request.
 
@@ -384,6 +386,26 @@ onCrawlerMessage( message => {
 });
 ```
 
-
-
-
+# Selectors
+Htcrawl implements all the selectors available in Puppeteer.  
+It also defines a custom selector to allow the selection of elements inside iframes. The iframe selctor is invoked with `inframe/` followed by the selector for the iframe, the 3-char separator ' ; ' and the selector of the element(s).  
+For example, if we have:
+```html
+<boby>
+  <!-- index.html -->
+  <iframe src="iframe.html">
+</body>
+```
+```html
+<boby>
+  <!-- iframe.html -->
+  <button id=btn>Hi</button>
+</body>
+```
+To select the button in the iframe the `inframe/body > iframe ; #btn` can be used.  
+Example:
+```js
+crawler.page().$('inframe/body > iframe ; #btn');
+crawler.page().$$('inframe/body > iframe ; button');
+crawler.page().waitForSelector('inframe/body > iframe ; #btn');
+```
