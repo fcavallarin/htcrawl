@@ -97,6 +97,19 @@ exports.Request = Request;
 		}
 	}
 
+	if(options.overridePostMessage){
+		window.__PROBE__.originals.postMessage = window.postMessage;
+		window.postMessage = function(message, targetOrigin, transfer) {
+			const dst = window.__PROBE__.getElementSelector(document.querySelector("html"))
+			window.__PROBE__.triggerPostMessageEvent(dst, message, targetOrigin, transfer).then(uRet => {
+				if(uRet){
+					const w = dst.ownerDocument.defaultView;
+					w.__PROBE__.originals.postMessage.call(w, message, targetOrigin, transfer);
+				}
+			});
+			// postMessage returns undefined
+		};
+	}
 }
 
 

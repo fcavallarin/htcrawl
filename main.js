@@ -49,8 +49,12 @@ exports.launch = async function(url, options){
 		'--disable-web-security',
 		'--allow-running-insecure-content',
 		'--proxy-bypass-list=<-loopback>',
-		`--window-size=${options.windowSize.join(",")}`
+		`--window-size=${options.windowSize.join(",")}`,
 	];
+
+	if(options.includeAllOrigins){
+		chromeArgs.push('--disable-features=OutOfBlinkCors,IsolateOrigins,SitePerProcess');
+	}
 
 	if(options.proxy){
 		chromeArgs.push("--proxy-server=" + options.proxy);
@@ -154,6 +158,7 @@ function Crawler(targetUrl, options, browser){
 		eventtriggered: null,
 		pageinitialized: null,
 		crawlelement: null,
+		postmessage: null,
 	}
 
 	this.UIEvents = {};
@@ -305,7 +310,6 @@ Crawler.prototype._afterNavigation = async function(resp){
 		}
 		return this;
 	}catch(e){
-		//;
 		throw e;
 	};
 };
@@ -346,6 +350,9 @@ Crawler.prototype.on = function(eventName, handler){
 	eventName = eventName.toLowerCase();
 	if(!(eventName in this.probeEvents)){
 		throw("unknown event name: " + eventName);
+	}
+	if(eventName == "postmessage" && !this.options.overridePostMessage){
+		throw "overridePostMessage option must be true to use 'postmessage'";
 	}
 	this.probeEvents[eventName] = handler;
 };
@@ -526,6 +533,7 @@ Crawler.prototype.bootstrapPage = async function(){
 		if(this.isEventRegistered(name)){
 			return this.dispatchProbeEvent(name, params);
 		}
+		return true;
 	});
 	page.exposeFunction("__htcrawl_set_trigger__", (val) => {crawler._trigger = val});
 	page.exposeFunction("__htcrawl_wait_requests__", () => {return crawler._waitForRequestsCompletion()});
@@ -574,15 +582,20 @@ Crawler.prototype.bootstrapPage = async function(){
 		console.log(e)
 	}
 
-	page.on("frameattached", frame => {
-		frame.evaluate(() => {
-			try{
-				window.top.__PROBE__._newMutationObserver(document.documentElement);
-			}catch(e){
-				// Probably not on the same origin
-			}
-		});
+	page.on("frameattached", async frame => {
+		try{
+			await frame.evaluate(() => {
+				try{
+					window.top.__PROBE__._newMutationObserver(document.documentElement);
+				}catch(e){
+					// Probably not on the same origin
+				}
+			});
+		}catch(e){}
 	});
+
+	this._pendingRequests = [];
+	this._sentRequests = [];
 };
 
 Crawler.prototype.newPage = async function(url){
@@ -647,7 +660,7 @@ Crawler.prototype.reload = async function(){
 };
 
 
-Crawler.prototype.clickToNavigate = async function(element, timeout){
+Crawler.prototype.clickToNavigate = async function(element, timeout, untilSelector){
 	const _this = this;
 	var pa;
 	if(!this._loaded){
@@ -660,20 +673,22 @@ Crawler.prototype.clickToNavigate = async function(element, timeout){
 			throw("Element not found")
 		}
 	}
-	if(typeof timeout == 'undefined') timeout = 5000;
+	if(!timeout) timeout = 5000;
 
 	this._allowNavigation = true;
 	// await this._page.evaluate(() => window.__PROBE__.DOMMutations=[]);
 
-	try{
-		pa = await Promise.all([
-			element.click(),
-			this._page.waitForRequest(req => req.isNavigationRequest() && req.frame() == _this._page.mainFrame(), {timeout:timeout}),
-			this._page.waitForNavigation({waitUntil:'load'})
-		]);
-	} catch(e){
-		pa = null;
-	}
+	do{
+		try{
+			pa = await Promise.all([
+				element.click(),
+				this._page.waitForRequest(req => req.isNavigationRequest() && req.frame() == _this._page.mainFrame(), {timeout:timeout}),
+				this._page.waitForNavigation({waitUntil:'load'})
+			]);
+		} catch(e){
+			pa = null;
+		}
+	}while(untilSelector && !(await this._page.waitForSelector(untilSelector)));
 	this._allowNavigation = false;
 
 	if(pa != null){
@@ -758,7 +773,6 @@ Crawler.prototype.getElementText = async function(el){
 	}, el);
 }
 
-
 Crawler.prototype.fillInputValues = async function(el){
 	await this._page.evaluate(el => {
 		window.__PROBE__.fillInputValues(el);
@@ -790,7 +804,7 @@ Crawler.prototype._crawlDOM = async function(node, layer, domArr){
 		//console.log(">>>>RECURSON LIMIT REACHED :" + layer)
 		return;
 	}
-	
+
 	if(this.isEventRegistered("crawlelement")){
 		// do not await
 		this.dispatchProbeEvent("crawlelement", {
@@ -1042,4 +1056,12 @@ Crawler.prototype._setDefaultUI = async function(ui){
 			}
 		}
 	});
+};
+
+Crawler.prototype.postMessage = async function(destination, message, targetOrigin, transfer){
+	const dst = await this._page.$(destination);
+	this._page.evaluate( (dst, message, targetOrigin, transfer) => {
+		const w = dst.ownerDocument.defaultView;
+		w.__PROBE__.originals.postMessage.call(w, message, targetOrigin, transfer);
+	}, dst, message, targetOrigin, transfer);
 };

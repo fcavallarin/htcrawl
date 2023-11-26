@@ -1,0 +1,18 @@
+<html>
+<head>
+	<script src="common.js"></script>
+</head>
+
+<body>
+	<div id=target></div>
+    <button id="sendMessage">Send</button>
+    <script>
+        document.getElementById('sendMessage').addEventListener('click', () => {
+            window.parent.postMessage('iframe message', '*');
+        });
+
+        window.addEventListener('message', (event) => {
+            console.log("msg in frame:" + event.data)
+        });
+    </script>
+</html>

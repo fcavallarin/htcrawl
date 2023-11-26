@@ -395,14 +395,17 @@ function initProbe(options, inputValues){
 			*/
 
 			// Allow navigation only if it points to the current page and the hash has changed
-			if(el.matches("a")){
+			if(el.matches("a") || el.form){
 				var newUrl;
 				try{
-					newUrl = new URL(el.href);
+					newUrl = el.form ? new URL(el.form.action) : new URL(el.href);
 				}catch(e){
 					newUrl = null; // malformed URL, block navigation
 				}
 				if(newUrl){
+					if(newUrl.protocol == "javascript:"){
+						return;
+					}
 					const curUrl = new URL(document.location.href);
 					if(newUrl.hash && newUrl.hash != curUrl.hash){
 						newUrl.hash = "";
@@ -543,11 +546,19 @@ function initProbe(options, inputValues){
 	};
 
 	Probe.prototype._isHTMLElement = function(element){
-		return element instanceof window.top.HTMLElement || element instanceof element.ownerDocument.defaultView.HTMLElement;
+		try{
+			return element instanceof window.top.HTMLElement || element instanceof element.ownerDocument?.defaultView?.HTMLElement;
+		}catch(e){
+			return false;
+		}
 	}
 
 	Probe.prototype._isSVGElement = function(element){
-		return element instanceof window.top.SVGElement || element instanceof element.ownerDocument.defaultView.SVGElement;
+		try{
+			return element instanceof window.top.SVGElement || element instanceof element.ownerDocument?.defaultView?.SVGElement;
+		}catch(e){
+			return false;
+		}
 	}
 
 	Probe.prototype._getElementSelector = function(element){
@@ -777,6 +788,16 @@ function initProbe(options, inputValues){
 		});
 
 	};
+
+
+	Probe.prototype.triggerPostMessageEvent = async function(destination, message, targetOrigin, transfer){
+		return await this.dispatchProbeEvent("postmessage", {
+			destination: destination,
+			message: message,
+			targetOrigin: targetOrigin,
+			transfer: transfer,
+		});
+	}
 
 	// returns true if at least one request is performed
 	Probe.prototype.waitRequests = async function(requests){

@@ -4,12 +4,15 @@
 
 <body>
 	<div>
-		<!-- <iframe id=ifr src="inner-iframe.html"></iframe> -->
+		<!-- Not on the same origin, shoudl work as well -->
+		<iframe id=ifr src="http://localhost:9091/fetch.html"></iframe>
+
 		<button>new iframe</button>
 	</div>
 	<script>
 		document.querySelector("button").onclick = () => {
 			const i = document.createElement("iframe");
+			i.className = "d";
 			document.body.appendChild(i);
 			i.src="inner-iframe.html"
 		};

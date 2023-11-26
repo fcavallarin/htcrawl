@@ -40,6 +40,21 @@ const htcrawl = require('htcrawl');
   await crawler.start();
 })();
 ```
+
+## KEY FEATURES
+
+- Recursive crawling:
+    - Trigger all events attached to elements
+    - Wait for all requests
+    - Detect DOM changes
+    - Repeat the process for every new DOM node
+- Heuristic content deduplicator
+- Intercept all requests including websockets, jsonp, forms
+- Intercept postMessage
+- Transparent handling of iframes (all ifremas are crawled as thaey are part of the same DOM)
+- Can select elements inside iframes using a custom CSS selector
+- API to create custom UIs as chrome extensions
+
 ## DOCUMENTATION
 
 API documentation can be found at [docs/API.md](docs/API.md).
