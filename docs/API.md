@@ -57,6 +57,8 @@ htcap.launch(targetUrl, options).then(crawler => {
   - `windowSize` &lt;int[]&gt; width and height of the browser's window.
   - `showUI`  &lt;boolean&gt; Show the UI as devtools panel. It implies 'openChromeDevtools=true'
   - `customUI`  &lt;Object&gt; Configure the custom UI. It implies 'showUI=true'. See [Custom UI](#object-custom-ui) section.
+  - `overridePostMessage` &lt;boolean&gt; Whether to intercept window.postMessage. Defaults to true.
+  - `includeAllOrigins` &lt;boolean&gt; Whether to crawl frames of other origins (non same-origin).
 
 
 ## crawler.load()
@@ -85,8 +87,9 @@ Returns: &lt;Promise&gt;
 Reload the current page. Resolves when the page is loaded.  
 Returns: &lt;Promise&gt;
 
-## crawler.clickToNavigate(selector, timeout)
+## crawler.clickToNavigate(selector, timeout, untilSelector)
 Clicks on selector and waits for timeout milliseconds for the navigation to be started. Resolves when the navigation is completed.  
+If untilSelector is provided, the navigation is considered completed when the provided selector exists on the page.
 Returns: &lt;Promise&gt;
 
 ## crawler.waitForRequestsCompletion()
@@ -117,6 +120,23 @@ page.on("close", async () =>{
 ```
 ## crawler.sendToUI(message)
 Send a `message`` to the UI (the browser's extension).
+
+## crawler.postMessage(destination, message, targetOrigin, transfer)
+Call window.postMessage() without triggering the corresponding event. Useful if there is an event registered that
+cancels postMessage calls.  
+The first argument is the CSS selector any element within the receiving window/iframe. For example `html` corresponds to
+`window` and `inframe/iframe ; html` corresponds to the first iframe.
+
+Example:
+```js
+crawler.on("postmessage", async (event, crawler) => {
+  if(event.params.destination != "html"){
+    await crawler.postMessage("inframe/#frm ; html" "Overrided message", "*");
+    // Discart original message
+    return false;
+  }
+})
+```
 
 ## crawler.on(event, function)
 Registers an event handler.
@@ -186,7 +206,7 @@ Parameters:
 
 ### jsonp
 Emitted before sending a jsonp request.  
-Cancellable: True  
+Cancellable: False  
 Parameters:
 
 - `request` &lt;Object&gt; Instance of Request class
@@ -251,7 +271,9 @@ crawler.on("fillinput" (e, crawler) => {
 
 ### newdom
 Emitted when new DOM content is added to the page.  
-Cancellable: False  
+If `false` is returned the new element won't be crawled.  
+Triggered only while crawling.  
+Cancellable: True  
 Parameters:
 
 - `rootNode` &lt;string&gt; Css selector of the root element
@@ -321,6 +343,16 @@ Parameters:
 - `element` &lt;string&gt; Css selector of the element
 - `event` &lt;string&gt; Event name
 
+### postmessage
+Emitted when window.postMessage is called.
+Cancellable: True
+Parameters:
+
+- `destination` &lt;string&gt; Css selector of the destination of the message
+- `message` &lt;Object&gt; Message
+- `targetOrigin` &lt;string&gt; targetOrigin
+- `transfer` &lt;Object&gt; transfer
+
 
 # Object: Request
 Object used to hold informations about a request.
@@ -384,6 +416,26 @@ onCrawlerMessage( message => {
 });
 ```
 
-
-
-
+# Selectors
+Htcrawl implements all the selectors available in Puppeteer.  
+It also defines a custom selector to allow the selection of elements inside iframes. The iframe selctor is invoked with `inframe/` followed by the selector for the iframe, the 3-char separator ' ; ' and the selector of the element(s).  
+For example, if we have:
+```html
+<boby>
+  <!-- index.html -->
+  <iframe src="iframe.html">
+</body>
+```
+```html
+<boby>
+  <!-- iframe.html -->
+  <button id=btn>Hi</button>
+</body>
+```
+To select the button in the iframe the `inframe/body > iframe ; #btn` selector can be used.  
+Example:
+```js
+crawler.page().$('inframe/body > iframe ; #btn');
+crawler.page().$$('inframe/body > iframe ; button');
+crawler.page().waitForSelector('inframe/body > iframe ; #btn');
+```

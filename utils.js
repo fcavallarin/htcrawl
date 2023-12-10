@@ -75,25 +75,6 @@ exports.Request = Request;
 
 	}
 
-
-
-	// // @TODO is this needed???
-	// Node.prototype.originalRemoveChild = Node.prototype.removeChild;
-	// Node.prototype.removeChild = function(node){
-	// 	if(!node.__analyzed){
-	// 		//console.log("elem not analyzed "+ window.__PROBE__.stringifyElement(node) )
-	// 		//console.log(window.__PROBE__.getTrigger());
-	// 	}
-	// 	this.__removed = true;
-	// 	if(this instanceof HTMLElement){
-	// 		for (let c of this.getElementsByTagName("*"))
-	// 			c.__removed = true;
-	// 	}
-	// 	return this.originalRemoveChild(node);
-	// }
-
-
-
 	HTMLFormElement.prototype.originalSubmit = HTMLFormElement.prototype.submit;
 	HTMLFormElement.prototype.submit = function(){
 		window.__PROBE__.triggerFormSubmitEvent(this);
@@ -116,8 +97,19 @@ exports.Request = Request;
 		}
 	}
 
-
-
+	if(options.overridePostMessage){
+		window.__PROBE__.originals.postMessage = window.postMessage;
+		window.postMessage = function(message, targetOrigin, transfer) {
+			const dst = window.__PROBE__.getElementSelector(document.querySelector("html"))
+			window.__PROBE__.triggerPostMessageEvent(dst, message, targetOrigin, transfer).then(uRet => {
+				if(uRet){
+					const w = dst.ownerDocument.defaultView;
+					w.__PROBE__.originals.postMessage.call(w, message, targetOrigin, transfer);
+				}
+			});
+			// postMessage returns undefined
+		};
+	}
 }
 
 

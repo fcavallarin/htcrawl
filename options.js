@@ -39,7 +39,6 @@ exports.options = {
 	excludedUrls: [],
 	maximumRecursion: 15,
 	maximumAjaxChain: 30,
-	preventElementRemoval: 1,
 	randomSeed: "IsHOulDb34RaNd0MsTR1ngbUt1mN0t",
 	// map input names to string generators. see generateRandomValues to see all available generators
 	inputNameMatchValue:[ // regexps NEED to be string to get passed to phantom page
@@ -81,4 +80,6 @@ exports.options = {
 	windowSize: [1600, 1000],
 	showUI: false,
 	customUI: null,
+	overridePostMessage: false,
+	includeAllOrigins: false
 };
