@@ -363,6 +363,7 @@ Object used to hold informations about a request.
 - `data` &lt;string&gt; Request body (usually POST data)
 - `trigger` &lt;string&gt; Css selector of the HTML element that triggered the request
 - `extra_headers` &lt;Object&gt; Extra HTTP headers
+- `timestamp` &lt;Number&gt; Timestamp of the request
 
 
 # Object: Custom UI
