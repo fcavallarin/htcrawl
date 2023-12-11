@@ -84,10 +84,18 @@ exports.launch = async function(url, options){
 		for(let i = crawler._pendingRequests.length - 1; i >=0; i--){
 			let r = crawler._pendingRequests[i];
 			let events = {xhr: "xhrcompleted", fetch: "fetchcompleted"};
-			if(r.p.response()){
+			const resp = r.p.response();
+			if(resp){
 				let rtxt = null;
 				try{
-					rtxt = await r.p.response().text();
+					const rh = await resp.headers();
+					if (rh['content-length']) {
+						const rs = Number(rh['content-length']);
+						// Max 5kb
+						if (size <= 5000) {
+							rtxt = await r.p.response().text();
+						}
+					}
 				} catch(e){}
 				if(crawler.isEventRegistered(events[r.h.type])){
 					await crawler.dispatchProbeEvent(events[r.h.type], {
@@ -97,8 +105,7 @@ exports.launch = async function(url, options){
 				}
 				crawler._pendingRequests.splice(i, 1);
 			}
-			if(r.p.failure()){
-				//console.log("*** FAILUREResponse for " + r.p.url())
+			if(r.p.failure() || (new Date()).getTime()  - r.h.timestamp > 30000){
 				crawler._pendingRequests.splice(i, 1);
 			}
 		}
@@ -423,7 +430,8 @@ Crawler.prototype.handleRequest = async function(req){
 		}
 	}
 	// add to pending ajax before dispatchProbeEvent.
-	// Since dispatchProbeEvent can await for something (and take some time) we need to be sure that the current xhr is awaited from the main loop
+	// Since dispatchProbeEvent can await for something (and take some time)
+	// we need to be sure that the current xhr is awaited from the main loop
 	let ro = {p:req, h:r};
 	this._pendingRequests.push(ro);
 	let uRet = true;
@@ -442,7 +450,7 @@ Crawler.prototype._waitForRequestsCompletion = function(){
 	var requests = this._pendingRequests;
 	// var reqPerformed = false;
 	return new Promise( (resolve, reject) => {
-		var timeout = 1000 ;//_this.options.ajaxTimeout;
+		var timeout = 10000 ;//_this.options.ajaxTimeout;
 
 		var t = setInterval(function(){
 			if(timeout <= 0 || requests.length == 0){

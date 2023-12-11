@@ -275,6 +275,7 @@ function Request(type, method, url, data, trigger, extra_headers){
 	this.data = data || null;
 	this.trigger = trigger || null;
 	this.extra_headers = extra_headers || {};
+	this.timestamp = (new Date()).getTime();
 }
 
 Request.prototype.key = function(){
