@@ -1,6 +1,6 @@
 {
   "name": "htcrawl",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "crawler for single page applications",
   "main": "main.js",
   "dependencies": {
