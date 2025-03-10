@@ -4,11 +4,11 @@
   "description": "crawler for single page applications",
   "main": "main.js",
   "dependencies": {
-    "puppeteer": "^21.6.0",
+    "puppeteer": "^24.1.1",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "puppeteer": "^21.6.0"
+    "puppeteer": "^24.1.1"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
