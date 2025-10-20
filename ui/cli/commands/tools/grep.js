@@ -16,7 +16,7 @@ exports.builder = (yargs) => {
 
 const grep = async (crawler, text) => {
     const page = crawler.page();
-    const matches = await page.$x("//*[contains(text(), '" + text + "')]");
+    const matches = await page.$$("xpath/.//*[contains(text(), '" + text + "')]");
     for(let txt of matches){
         console.log("Found: " + await page.evaluate( el => el.innerText, txt));
     }
