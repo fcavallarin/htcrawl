@@ -27,4 +27,4 @@ LICENSE
 .eslintrc.json
 
 examples/
-
+tmp/
